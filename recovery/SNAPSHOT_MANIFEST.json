@@ -34,16 +34,16 @@
       "size": 631
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "46ec3cf7ca76131f583363fa8b5e11ea3d7a499823eff5693b747eb583b352d6",
-      "size": 529586
+      "sha256": "e325b30f2bea75570a059dd9e09b910182d50bc898936cef1df31c663742b033",
+      "size": 531526
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "7c9c5a92020a51fa13631c24543560a227095be678751ad112e928bcae8cc642",
-      "size": 424673
+      "sha256": "f8f1cc296dcda5ec28a8cb2ced36a386184c1ce9d2b8ec1da8b1d4906521b4db",
+      "size": 427973
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -66,8 +66,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "4f601255ee87db6077ee80efb7fe7af6a54efb3cd062a2d5cb014d9af904381d",
-      "size": 424823
+      "sha256": "8f868cc9494cb0e446c2542be7ec84de425a0817dccb9936f3d58f1229932fa7",
+      "size": 428123
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -382,11 +382,11 @@
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "d6643563e3d02a142f6fab1ad3b5c818640b3154019b18216980505ab18785d0",
+      "sha256": "84fe2145e967d151a44f798feb7b0578c0307fdf7c686de490f2e0dec6652fe4",
       "size": 4076
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "bc8e5a2aca3ce826cb36a5ed43d8391fb06804474c9b54f2e29d853bfc7bee93",
+      "sha256": "4b387cc382ed3d232e828b8ebcf2fbb523c192ec6b611b8053819662a4d01920",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -458,8 +458,8 @@
       "size": 31939
     },
     "scripts/checkpoint_backup_daemon.py": {
-      "sha256": "a81bc76928d83c1ddbdd16afc1a06f46269d3ddd1167f88b05dbc4f60e5899ac",
-      "size": 7797
+      "sha256": "ee5bb1f2e44e709090d27f0a4f2fc21b1134bb33f7dfcda95bcdd39555e1ee9e",
+      "size": 8304
     },
     "scripts/compare_locked_paired.py": {
       "sha256": "cdd8448ccf43f85f0a82b37158d0b21f432d53bdfe5080b90c3ff2603249e8aa",
@@ -502,8 +502,8 @@
       "size": 25508
     },
     "scripts/export_repro_snapshot.py": {
-      "sha256": "28f6f5ee95fd67151aefff1a92511f5c9258561b73835b0f6ec39551e367818f",
-      "size": 13128
+      "sha256": "06a891bab2d0e7029a025767c3b599990c35af0fdccb4ee5488fabe003cfc531",
+      "size": 13221
     },
     "scripts/launch_aio3_stage_a_4x4090.sh": {
       "sha256": "02f752fd3ddc73abb4bb6ab5d3a7463a1092071dfb50c2d3ff274672f00fc755",
@@ -830,7 +830,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T13:28:06.275638+00:00",
+  "generated_utc": "2026-07-18T13:33:02.229551+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }

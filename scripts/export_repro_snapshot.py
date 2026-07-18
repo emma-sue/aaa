@@ -120,6 +120,8 @@ def iter_tree(root: Path) -> list[Path]:
 def copy_checked(source: Path, destination: Path) -> dict[str, object]:
     data = safe_source_file(source)
     atomic_write(destination, data)
+    mode = 0o755 if source.stat().st_mode & 0o111 else 0o644
+    os.chmod(destination, mode)
     return {"sha256": sha256_bytes(data), "size": len(data)}
 
 

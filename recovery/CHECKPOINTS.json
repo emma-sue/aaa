@@ -20,19 +20,19 @@
     "stage": "a",
     "step": 198595
   },
-  "generated_utc": "2026-07-18T13:28:05.032002+00:00",
+  "generated_utc": "2026-07-18T13:33:00.905616+00:00",
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "asset_name": "last.pt",
-    "mtime_ns": 1784381266384599839,
+    "mtime_ns": 1784381403968208518,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
     "release_tag": "resume-aio3-stage-a",
     "run_name": "aio3_stage_a_coarse_seed1415926",
     "selection": "resume-last",
-    "sha256": "a9884532b4eb215943646f4b15ae0ab55bd8f74c053c49a29dc0606cb8969ce7",
+    "sha256": "cca9706e9763c355f5b8efd503642f347ae232e58744c8f0af2b5640d4143a65",
     "size": 303948065,
     "stage": "a"
   },

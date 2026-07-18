@@ -88,6 +88,16 @@ def release_exists(repo: str, tag: str) -> bool:
     ).returncode == 0
 
 
+def release_asset_names(repo: str, tag: str) -> set[str]:
+    if not release_exists(repo, tag):
+        return set()
+    payload = json.loads(run(
+        ["gh", "release", "view", tag, "--repo", repo, "--json", "assets"],
+        capture=True,
+    ).stdout)
+    return {str(asset["name"]) for asset in payload.get("assets", [])}
+
+
 def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
     source = Path(str(row["absolute_source_path"]))
     expected = str(row["sha256"])
@@ -102,7 +112,8 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
         sidecar.write_text(f"{actual}  {row['asset_name']}\n")
         metadata = temp_path / (str(row["asset_name"]) + ".json")
         metadata.write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
-        if immutable and release_exists(repo, tag):
+        required_assets = {asset.name, sidecar.name, metadata.name}
+        if immutable and required_assets.issubset(release_asset_names(repo, tag)):
             return
         if not release_exists(repo, tag):
             run([
@@ -147,6 +158,7 @@ def iteration(args: argparse.Namespace) -> None:
         publish_release(args.repo, best, immutable=True)
         state["best_sha256"] = best["sha256"]
         state["best_uploaded_utc"] = utc()
+        save_state(state_path, state)
         uploaded = True
     resume = index.get("resume_latest")
     due = time.time() - float(state.get("resume_upload_unix", 0)) >= args.resume_interval_hours * 3600
@@ -155,6 +167,7 @@ def iteration(args: argparse.Namespace) -> None:
         state["resume_sha256"] = resume["sha256"]
         state["resume_upload_unix"] = time.time()
         state["resume_uploaded_utc"] = utc()
+        save_state(state_path, state)
         uploaded = True
     save_state(state_path, state)
     if uploaded:
