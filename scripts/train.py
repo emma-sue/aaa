@@ -13,6 +13,7 @@ import os
 import random
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +44,10 @@ from scripts.runtime_accounting import (
     read_runtime_sidecar,
     runtime_snapshot,
     start_runtime_accounting,
+)
+from scripts.stage_b_runtime import (
+    assert_no_runtime_worker_override,
+    runtime_identity_for_config,
 )
 
 
@@ -186,12 +191,14 @@ def validate_resume_contract(payload: dict, cfg: dict, args):
 def ensure_run_contract(run_dir: Path, cfg: dict, args):
     code_paths = (
         Path(__file__),
+        ROOT / "scripts/stage_b_runtime.py",
         ROOT / "src/net/feedback_controls.py",
         ROOT / "src/net/srsc_lite.py",
         ROOT / "src/net/srsc_coordinates.py",
         ROOT / "src/data/aio_dataset.py",
         ROOT / "src/losses/objectives.py",
     )
+    runtime_identity = runtime_identity_for_config(Path(args.config), cfg)
     contract = {
         "schema": 1,
         "run_name": args.run_name,
@@ -219,6 +226,7 @@ def ensure_run_contract(run_dir: Path, cfg: dict, args):
         "deterministic_algorithms": True,
         "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
     }
+    contract.update(runtime_identity)
     path = run_dir / "run_contract.json"
     if path.is_file():
         existing = json.loads(path.read_text())
@@ -505,6 +513,218 @@ def optimizer_groups(model, stage, lr):
     if not slow or not main:
         raise RuntimeError("Stage-C optimizer groups are empty")
     return [{"params": slow, "lr": lr * 0.1}, {"params": main, "lr": lr}]
+
+
+def build_optimizer(model, stage: str, cfg: dict):
+    """Build the optimizer used by both formal training and memory preflight.
+
+    Adam creates its moment tensors lazily on the first ``step``.  Keeping this
+    construction in one helper prevents a memory probe from underestimating the
+    formal path by accidentally using different parameter groups or optimizer
+    settings.
+    """
+    groups = optimizer_groups(model, stage, cfg["lr"])
+    params = [parameter for group in groups for parameter in group["params"]]
+    optimizer_name = cfg.get("optimizer", "adam").lower()
+    if optimizer_name == "adam":
+        optimizer = torch.optim.Adam(
+            groups, lr=cfg["lr"], betas=(0.9, 0.999), weight_decay=0.0
+        )
+    elif optimizer_name == "adamw":
+        optimizer = torch.optim.AdamW(
+            groups,
+            lr=cfg["lr"],
+            betas=(0.9, 0.999),
+            weight_decay=cfg["weight_decay"],
+        )
+    else:
+        raise ValueError(f"unsupported optimizer: {optimizer_name}")
+    return params, optimizer
+
+
+def configure_feedback_mode(model, stage: str, feedback: str) -> None:
+    """Configure the common predicted interface without duplicating trainers."""
+    if not isinstance(model, SRSCLite):
+        return
+    if stage == "b_predicted":
+        if feedback not in PREDICTED_FEEDBACK_MODES:
+            raise ValueError(
+                f"feedback {feedback} is oracle-only and cannot enter {stage}"
+            )
+        model.predicted_feedback_mode = feedback
+        # Retained only for compatibility with old O0 checkpoints/tests.  The
+        # common interface itself already hard-zeros O0.
+        model.force_zero_state = feedback == "O0"
+    elif stage == "c":
+        if feedback in DETERMINISTIC_FEEDBACK_MODES:
+            model.predicted_feedback_mode = None
+        elif feedback in PREDICTED_FEEDBACK_MODES:
+            model.predicted_feedback_mode = feedback
+            model.force_zero_state = feedback == "O0"
+        else:
+            raise ValueError(f"feedback {feedback} is not deployable in Stage-C")
+
+
+@dataclass
+class StageBTerms:
+    """Unscaled formal Stage-B objective components for one micro-batch."""
+
+    total: torch.Tensor
+    rest: torch.Tensor
+    state: torch.Tensor
+    clean: torch.Tensor
+    prediction: torch.Tensor
+
+
+def compute_stage_b_terms(
+    model,
+    x: torch.Tensor,
+    gt: torch.Tensor,
+    *,
+    stage: str,
+    builder,
+    feedback: str,
+    feedback_stats: dict | None,
+    cfg: dict,
+) -> StageBTerms:
+    """Execute the exact Oracle/Predicted Stage-B forward and objective.
+
+    The caller owns autocast and backward.  Both formal training and the
+    no-metric memory preflight call this function, so the probe cannot replace
+    the expensive 81-D coordinate construction or state supervision with a
+    synthetic approximation.
+    """
+    if stage not in {"b_oracle", "b_predicted"}:
+        raise ValueError(f"Stage-B terms do not support stage={stage!r}")
+    state_term = x.new_zeros(())
+    clean_term = x.new_zeros(())
+    if stage == "b_oracle":
+        with torch.no_grad():
+            features, y1 = model._encode_coarse(x)
+            # Capacity/compute-matched dummy assessor path.  Its output is
+            # deliberately discarded at the common eight-channel interface.
+            _ = model.assessor(x, y1, features)
+            coords = builder(
+                x,
+                y1,
+                gt,
+                [feature.shape[-2:] for feature in features],
+                requested={feedback},
+            )
+        states = normalize_feedback(
+            feedback_from_coordinates(
+                coords, feedback, model.oracle_ceiling_adapter
+            ),
+            feedback,
+            feedback_stats,
+        )
+        prediction = model._run_d2(x, y1, features, states)
+        rest = restoration_l1(prediction, gt)
+        clean_term = ((1.0 - coords[0].q) * (prediction - y1).abs()).mean()
+    else:
+        details = model.forward_details(x)
+        prediction = details.y2
+        target_mode = (
+            feedback
+            if feedback in DETERMINISTIC_FEEDBACK_MODES
+            else predicted_supervision_mode(feedback)
+        )
+        coords = builder(
+            x,
+            details.y1,
+            gt,
+            [feature.shape[-2:] for feature in details.features],
+            requested={target_mode},
+        )
+        raw_targets = feedback_from_coordinates(
+            coords, target_mode, model.oracle_ceiling_adapter
+        )
+        targets = normalize_feedback(raw_targets, target_mode, feedback_stats)
+        direction_weight = 0.1 if target_mode in {"O7", "O8", "O15"} else 0.0
+        coordinate_direction_weights = (
+            direction_weights_from_coordinates(coords, target_mode)
+            if direction_weight
+            else None
+        )
+        state_term, _ = state_loss(
+            details.states,
+            targets,
+            direction_cosine_weight=direction_weight,
+            direction_weights=coordinate_direction_weights,
+            direction_valid_masks=(
+                direction_valid_masks(raw_targets, coordinate_direction_weights)
+                if direction_weight
+                else None
+            ),
+        )
+        rest = 0.5 * restoration_l1(details.y1, gt) + restoration_l1(
+            prediction, gt
+        )
+        clean_term = (
+            (1.0 - coords[0].q) * (prediction - details.y1).abs()
+        ).mean()
+    total = (
+        rest
+        + cfg.get("lambda_state", 0.1) * state_term
+        + cfg.get("lambda_clean", 0.1) * clean_term
+    )
+    return StageBTerms(total, rest, state_term, clean_term, prediction)
+
+
+def backward_stage_b_microbatch(
+    model,
+    x: torch.Tensor,
+    gt: torch.Tensor,
+    *,
+    stage: str,
+    builder,
+    feedback: str,
+    feedback_stats: dict | None,
+    cfg: dict,
+    accumulation: int,
+    amp_dtype: torch.dtype = torch.bfloat16,
+) -> tuple[StageBTerms, torch.Tensor]:
+    """Run the shared BF16 Stage-B forward, scaled loss, and backward."""
+    if accumulation <= 0:
+        raise ValueError("accumulation must be positive")
+    device_type = x.device.type
+    with torch.autocast(
+        device_type,
+        dtype=amp_dtype,
+        enabled=device_type == "cuda",
+    ):
+        terms = compute_stage_b_terms(
+            model,
+            x,
+            gt,
+            stage=stage,
+            builder=builder,
+            feedback=feedback,
+            feedback_stats=feedback_stats,
+            cfg=cfg,
+        )
+        scaled_loss = terms.total / accumulation
+    scaled_loss.backward()
+    return terms, scaled_loss
+
+
+def commit_optimizer_update(
+    params,
+    optimizer,
+    *,
+    gradient_clip: float,
+    scheduler=None,
+    scheduler_unit: str | None = None,
+) -> torch.Tensor:
+    """Commit the exact formal clip/optimizer/optional step-scheduler path."""
+    grad_norm = torch.nn.utils.clip_grad_norm_(params, gradient_clip)
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    if scheduler_unit == "step":
+        if scheduler is None:
+            raise ValueError("step scheduler unit requires a scheduler")
+        scheduler.step()
+    return grad_norm
 
 
 def save_checkpoint(
@@ -825,6 +1045,13 @@ def main():
         raise ValueError("only the audited bf16 training path is enabled")
     if args.workers_override is not None and args.workers_override <= 0:
         raise ValueError("workers-override must be positive")
+    runtime_identity = runtime_identity_for_config(Path(args.config), cfg)
+    assert_no_runtime_worker_override(cfg)
+    if runtime_identity and args.workers_override is not None:
+        raise ValueError(
+            "workers-override is forbidden for a frozen Stage-B runtime; "
+            "the generated config owns the worker count"
+        )
     seed_all(cfg["seed"])
     torch.set_float32_matmul_precision("high")
     # Stage-B mechanism thresholds are as small as 0.02 dB.  Runtime kernel
@@ -859,23 +1086,7 @@ def main():
         generator=loader_generator,
     )
     model = build_model(cfg, args.stage).cuda()
-    if isinstance(model, SRSCLite) and args.stage == "b_predicted":
-        if args.feedback not in PREDICTED_FEEDBACK_MODES:
-            raise ValueError(
-                f"feedback {args.feedback} is oracle-only and cannot enter {args.stage}"
-            )
-        model.predicted_feedback_mode = args.feedback
-        # Retained only for compatibility with old O0 checkpoints/tests.  The
-        # new common interface already hard-zeros O0 for every forward path.
-        model.force_zero_state = args.feedback == "O0"
-    elif isinstance(model, SRSCLite) and args.stage == "c":
-        if args.feedback in DETERMINISTIC_FEEDBACK_MODES:
-            model.predicted_feedback_mode = None
-        elif args.feedback in PREDICTED_FEEDBACK_MODES:
-            model.predicted_feedback_mode = args.feedback
-            model.force_zero_state = args.feedback == "O0"
-        else:
-            raise ValueError(f"feedback {args.feedback} is not deployable in Stage-C")
+    configure_feedback_mode(model, args.stage, args.feedback)
     if args.init:
         payload = torch.load(args.init, map_location="cpu", weights_only=False)
         state = payload.get("model", payload)
@@ -897,17 +1108,7 @@ def main():
                 flush=True,
             )
     configure_trainable(model, args.stage)
-    groups = optimizer_groups(model, args.stage, cfg["lr"])
-    params = [p for group in groups for p in group["params"]]
-    optimizer_name = cfg.get("optimizer", "adam").lower()
-    if optimizer_name == "adam":
-        optimizer = torch.optim.Adam(groups, lr=cfg["lr"], betas=(0.9, 0.999), weight_decay=0.0)
-    elif optimizer_name == "adamw":
-        optimizer = torch.optim.AdamW(
-            groups, lr=cfg["lr"], betas=(0.9, 0.999), weight_decay=cfg["weight_decay"]
-        )
-    else:
-        raise ValueError(f"unsupported optimizer: {optimizer_name}")
+    params, optimizer = build_optimizer(model, args.stage, cfg)
     # Discard at most accumulation-1 micro-batches per epoch.  Carrying a
     # partial accumulated gradient across an epoch boundary makes resume and
     # scheduler accounting non-reproducible.
@@ -1071,80 +1272,111 @@ def main():
                     continue
                 x = batch["degraded"].cuda(non_blocking=True)
                 gt = batch["clean"].cuda(non_blocking=True)
-                with torch.autocast("cuda", dtype=amp_dtype):
-                    state_term = x.new_zeros(())
-                    clean_term = x.new_zeros(())
-                    if args.stage in {"baseline", "baseline_matched", "baseline_ft", "baseline_matched_ft"}:
-                        prediction = model(x)
-                        rest = restoration_l1(prediction, gt)
-                    elif args.stage == "a":
-                        features = model.encoder(x)
-                        delta0, _ = model.d1(features)
-                        rest = restoration_l1(x + delta0, gt)
-                    elif args.stage == "b_oracle":
-                        with torch.no_grad():
-                            features, y1 = model._encode_coarse(x)
-                            _ = model.assessor(x, y1, features)
-                            coords = builder(
-                                x, y1, gt, [f.shape[-2:] for f in features], requested={args.feedback}
+                if args.stage in {"b_oracle", "b_predicted"}:
+                    terms, loss = backward_stage_b_microbatch(
+                        model,
+                        x,
+                        gt,
+                        stage=args.stage,
+                        builder=builder,
+                        feedback=args.feedback,
+                        feedback_stats=feedback_stats,
+                        cfg=cfg,
+                        accumulation=cfg["accumulation"],
+                        amp_dtype=amp_dtype,
+                    )
+                    rest = terms.rest
+                    state_term = terms.state
+                    clean_term = terms.clean
+                else:
+                    with torch.autocast("cuda", dtype=amp_dtype):
+                        state_term = x.new_zeros(())
+                        clean_term = x.new_zeros(())
+                        if args.stage in {
+                            "baseline",
+                            "baseline_matched",
+                            "baseline_ft",
+                            "baseline_matched_ft",
+                        }:
+                            prediction = model(x)
+                            rest = restoration_l1(prediction, gt)
+                        elif args.stage == "a":
+                            features = model.encoder(x)
+                            delta0, _ = model.d1(features)
+                            rest = restoration_l1(x + delta0, gt)
+                        else:
+                            # Stage-C retains its joint gradient routing.  Its
+                            # terms are intentionally not used by the frozen
+                            # Stage-B memory preflight.
+                            details = model.forward_details(x)
+                            prediction = details.y2
+                            target_mode = (
+                                args.feedback
+                                if args.feedback in DETERMINISTIC_FEEDBACK_MODES
+                                else predicted_supervision_mode(args.feedback)
                             )
-                        states = normalize_feedback(
-                            feedback_from_coordinates(coords, args.feedback, model.oracle_ceiling_adapter),
-                            args.feedback, feedback_stats,
-                        )
-                        prediction = model._run_d2(x, y1, features, states)
-                        rest = restoration_l1(prediction, gt)
-                        clean_term = ((1.0 - coords[0].q) * (prediction - y1).abs()).mean()
-                    else:
-                        details = model.forward_details(x)
-                        prediction = details.y2
-                        target_mode = (
-                            args.feedback
-                            if args.feedback in DETERMINISTIC_FEEDBACK_MODES
-                            else predicted_supervision_mode(args.feedback)
-                        )
-                        coords = builder(
-                            x, details.y1, gt, [f.shape[-2:] for f in details.features],
-                            requested={target_mode},
-                        )
-                        raw_targets = feedback_from_coordinates(
-                            coords, target_mode, model.oracle_ceiling_adapter
-                        )
-                        targets = normalize_feedback(
-                            raw_targets,
-                            target_mode, feedback_stats,
-                        )
-                        direction_weight = (
-                            0.1 if target_mode in {"O7", "O8", "O15"} else 0.0
-                        )
-                        coordinate_direction_weights = (
-                            direction_weights_from_coordinates(coords, target_mode)
-                            if direction_weight else None
-                        )
-                        state_term, _ = state_loss(
-                            details.states, targets,
-                            direction_cosine_weight=direction_weight,
-                            direction_weights=coordinate_direction_weights,
-                            direction_valid_masks=(
-                                direction_valid_masks(
-                                    raw_targets, coordinate_direction_weights
+                            coords = builder(
+                                x,
+                                details.y1,
+                                gt,
+                                [feature.shape[-2:] for feature in details.features],
+                                requested={target_mode},
+                            )
+                            raw_targets = feedback_from_coordinates(
+                                coords,
+                                target_mode,
+                                model.oracle_ceiling_adapter,
+                            )
+                            targets = normalize_feedback(
+                                raw_targets, target_mode, feedback_stats
+                            )
+                            direction_weight = (
+                                0.1
+                                if target_mode in {"O7", "O8", "O15"}
+                                else 0.0
+                            )
+                            coordinate_direction_weights = (
+                                direction_weights_from_coordinates(
+                                    coords, target_mode
                                 )
-                                if direction_weight else None
-                            ),
-                        )
-                        rest = 0.5 * restoration_l1(details.y1, gt) + restoration_l1(prediction, gt)
-                        clean_term = ((1.0 - coords[0].q) * (prediction - details.y1).abs()).mean()
-                    loss = (
-                        rest
-                        + cfg.get("lambda_state", 0.1) * state_term
-                        + cfg.get("lambda_clean", 0.1) * clean_term
-                    ) / cfg["accumulation"]
-                loss.backward()
+                                if direction_weight
+                                else None
+                            )
+                            state_term, _ = state_loss(
+                                details.states,
+                                targets,
+                                direction_cosine_weight=direction_weight,
+                                direction_weights=coordinate_direction_weights,
+                                direction_valid_masks=(
+                                    direction_valid_masks(
+                                        raw_targets,
+                                        coordinate_direction_weights,
+                                    )
+                                    if direction_weight
+                                    else None
+                                ),
+                            )
+                            rest = 0.5 * restoration_l1(
+                                details.y1, gt
+                            ) + restoration_l1(prediction, gt)
+                            clean_term = (
+                                (1.0 - coords[0].q)
+                                * (prediction - details.y1).abs()
+                            ).mean()
+                        loss = (
+                            rest
+                            + cfg.get("lambda_state", 0.1) * state_term
+                            + cfg.get("lambda_clean", 0.1) * clean_term
+                        ) / cfg["accumulation"]
+                    loss.backward()
                 if (batch_index + 1) % cfg["accumulation"] == 0:
-                    torch.nn.utils.clip_grad_norm_(params, cfg["gradient_clip"])
-                    optimizer.step(); optimizer.zero_grad(set_to_none=True)
-                    if scheduler_unit == "step":
-                        scheduler.step()
+                    commit_optimizer_update(
+                        params,
+                        optimizer,
+                        gradient_clip=cfg["gradient_clip"],
+                        scheduler=scheduler,
+                        scheduler_unit=scheduler_unit,
+                    )
                     global_step += 1
                     if global_step % 50 == 0:
                         row = {

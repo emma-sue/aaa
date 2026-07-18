@@ -37,7 +37,9 @@ python scripts/verify_stage_a_checkpoint.py \
 # Explicitly expose four slots to the orchestrator so it can run one unchanged
 # arm per GPU after Stage-A; this does not alter any arm's scientific budget.
 export SRSC_PARALLEL_GPUS=0,1,2,3
-export SRSC_TRAIN_WORKERS=8
+# The frozen Stage-B YAML owns workers=8 for every arm.  Clear any inherited
+# override so pilot, formal, resume, and the 10/10 control share one identity.
+unset SRSC_TRAIN_WORKERS
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
 export OMP_NUM_THREADS=4
 export MKL_NUM_THREADS=4

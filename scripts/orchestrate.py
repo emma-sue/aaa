@@ -30,6 +30,12 @@ from scripts.eval_locked import (
     official_evaluation_code_hashes,
 )
 from scripts.runtime_accounting import read_runtime_sidecar
+from scripts.stage_b_runtime import (
+    StageBRuntimeBundle,
+    assert_no_runtime_worker_override,
+    ensure_stage_b_runtime_bundle,
+    runtime_identity_for_config,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CODE_ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +66,8 @@ CONTRACTS = [
     ROOT / "scripts/train.py",
     ROOT / "scripts/train_stage_a_ddp.py",
     ROOT / "scripts/runtime_accounting.py",
+    ROOT / "scripts/stage_b_runtime.py",
+    ROOT / "scripts/preflight_stage_b_runtime.py",
     ROOT / "scripts/monitor_runtime_accounting.py",
     ROOT / "scripts/exec_unblocked.py",
     ROOT / "scripts/compute_coordinate_stats.py",
@@ -997,17 +1005,24 @@ def select_predicted_model(predicted: dict, predicted_go: bool) -> str:
     return best if scores[best] >= predicted["O7"]["macro_psnr"] else "NO_GO"
 
 
-def contract_hashes() -> dict[str, str]:
+def contract_hashes(
+    extra_contracts: tuple[Path, ...] | list[Path] = (),
+) -> dict[str, str]:
     hashes = {}
-    for path in CONTRACTS:
+    for path in (*CONTRACTS, *tuple(extra_contracts)):
+        path = Path(path).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"contract missing: {path}")
         hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
     return hashes
 
 
-def review_contract(phase: str):
-    hashes = contract_hashes()
+def review_contract(
+    phase: str,
+    *,
+    extra_contracts: tuple[Path, ...] | list[Path] = (),
+):
+    hashes = contract_hashes(extra_contracts)
     prompt = CONTRACTS[0].read_text()
     required = ["fixed K=2", "no recurrence", "no MoE", "SCIENTIFIC_GO", "PUBLICATION_GO"]
     missing = [token for token in required if token not in prompt]
@@ -1045,6 +1060,7 @@ def review_contract(phase: str):
 def current_train_code_hashes() -> dict[str, str]:
     paths = (
         CODE_ROOT / "scripts/train.py",
+        CODE_ROOT / "scripts/stage_b_runtime.py",
         CODE_ROOT / "src/net/feedback_controls.py",
         CODE_ROOT / "src/net/srsc_lite.py",
         CODE_ROOT / "src/net/srsc_coordinates.py",
@@ -1104,7 +1120,11 @@ def _run_cache_expectation(
                 return None
             coordinate_stats = _sha256_file(stats)
 
-        workers_override = registered_train_workers()
+        runtime_identity = runtime_identity_for_config(config, effective_config)
+        assert_no_runtime_worker_override(effective_config)
+        workers_override = (
+            None if runtime_identity else registered_train_workers()
+        )
         contract = {
             "schema": 1,
             "run_name": run_name,
@@ -1125,6 +1145,7 @@ def _run_cache_expectation(
             "code_sha256": current_train_code_hashes(),
             "deterministic_algorithms": True,
         }
+        contract.update(runtime_identity)
         return {
             "config_path": str(config),
             "contract": contract,
@@ -2718,6 +2739,11 @@ def train_command(
     config: Path, stage: str, run_name: str, feedback: str,
     init: Path | None, max_steps: int = 0, seed_override: int | None = None,
 ):
+    effective_config = yaml.safe_load(Path(config).read_text())
+    if not isinstance(effective_config, dict):
+        raise RuntimeError(f"training config is not a mapping: {config}")
+    runtime_identity = runtime_identity_for_config(config, effective_config)
+    assert_no_runtime_worker_override(effective_config)
     command = [
         sys.executable, "scripts/train.py", "--config", str(config), "--stage", stage,
         "--feedback", feedback, "--run-name", run_name,
@@ -2731,7 +2757,10 @@ def train_command(
         command += ["--max-steps", str(max_steps)]
     if seed_override is not None:
         command += ["--seed-override", str(seed_override)]
-    workers = registered_train_workers()
+    # Frozen Stage-B configs own their worker count.  Ambient overrides are
+    # forbidden above and therefore cannot change pilot/formal/capacity runs
+    # or make a later resume acquire a different run-contract identity.
+    workers = None if runtime_identity else registered_train_workers()
     if workers is not None:
         command += ["--workers-override", str(workers)]
     return command
@@ -2793,7 +2822,11 @@ def acquire_process_lock(path: Path) -> int:
     return fd
 
 
-def run_aio3_capacity_robustness(decision: dict, decision_path: Path) -> bool:
+def run_aio3_capacity_robustness(
+    decision: dict,
+    decision_path: Path,
+    runtime_bundle: StageBRuntimeBundle,
+) -> bool:
     """Run the preregistered 10/10 ownership split after the main Stage-B GO.
 
     The total decoder budget and per-scale total remain unchanged: the main
@@ -2801,8 +2834,24 @@ def run_aio3_capacity_robustness(decision: dict, decision_path: Path) -> bool:
     from scratch and evaluates only the two required orderings, without a new
     hyperparameter search or feedback ladder.
     """
+    if (
+        runtime_bundle.protocol != "aio3"
+        or runtime_bundle.capacity_config is None
+        or runtime_bundle.capacity_config_sha256 is None
+    ):
+        raise RuntimeError("10/10 capacity control requires the frozen AIO3 bundle")
+    capacity_identity = runtime_identity_for_config(
+        runtime_bundle.capacity_config
+    )
+    if (
+        capacity_identity.get("stage_b_runtime_manifest_sha256")
+        != runtime_bundle.manifest_sha256
+        or _sha256_file(runtime_bundle.capacity_config)
+        != runtime_bundle.capacity_config_sha256
+    ):
+        raise RuntimeError("AIO3 10/10 runtime bundle drift; batch reselection forbidden")
     config = ROOT / "configs/protocol_aio3_10_10.yaml"
-    stage_b_config = ROOT / "configs/stage_b_aio3_10_10.yaml"
+    stage_b_config = runtime_bundle.capacity_config
     cfg = yaml.safe_load(config.read_text())
     stage_b_cfg = yaml.safe_load(stage_b_config.read_text())
     stage_a_name = f"aio3_stage_a_coarse_10_10_seed{cfg['seed']}"
@@ -2818,7 +2867,10 @@ def run_aio3_capacity_robustness(decision: dict, decision_path: Path) -> bool:
         config, stage_a, "aio3_stage_a_10_10_locked_val_cache.log"
     )
     ensure_coordinate_stats(config, stage_a, "aio3_coordinate_stats_10_10.log")
-    review_contract("aio3_before_capacity_10_10_stage_b")
+    review_contract(
+        "aio3_before_capacity_10_10_stage_b",
+        extra_contracts=runtime_bundle.contract_paths,
+    )
 
     metrics = {}
     capacity_jobs = []
@@ -2912,11 +2964,31 @@ def main():
         ensure_stage_a_locked_val_cache(
             config, stage_a, f"{args.protocol}_stage_a_locked_val_cache.log"
         )
-        ensure_coordinate_stats(
+        coordinate_stats = ensure_coordinate_stats(
             config, stage_a, f"{args.protocol}_coordinate_stats.log"
         )
+        runtime_bundle = ensure_stage_b_runtime_bundle(
+            ROOT,
+            args.protocol,
+            stage_a_checkpoint=stage_a,
+            coordinate_stats=coordinate_stats,
+            runner=run,
+        )
+        stage_b_config = runtime_bundle.main_config
+        stage_b_cfg = yaml.safe_load(stage_b_config.read_text())
+        note(
+            "STAGE_B_RUNTIME FROZEN "
+            f"protocol={args.protocol} micro_batch={runtime_bundle.micro_batch} "
+            f"accumulation={runtime_bundle.accumulation} "
+            f"effective_batch={runtime_bundle.effective_batch} "
+            f"workers={runtime_bundle.workers} "
+            f"manifest_sha256={runtime_bundle.manifest_sha256}"
+        )
 
-        review_contract(f"{args.protocol}_before_stage_b")
+        review_contract(
+            f"{args.protocol}_before_stage_b",
+            extra_contracts=runtime_bundle.contract_paths,
+        )
 
         # Pilot is a plumbing/optimization sanity check only.  Its metrics are
         # recorded but must never authorize SCIENTIFIC_GO or NO_GO.
@@ -2929,13 +3001,14 @@ def main():
                 f"_n{args.pilot_steps}_s{cfg['seed']}"
             )
             if not pilot_complete(
-                name, args.pilot_steps, config=config, stage="b_oracle",
+                name, args.pilot_steps, config=stage_b_config, stage="b_oracle",
                 feedback=feedback, init=stage_a,
             ):
                 pilot_jobs.append(
                     (
                         train_command(
-                            config, "b_oracle", name, feedback, stage_a, args.pilot_steps
+                            stage_b_config, "b_oracle", name, feedback,
+                            stage_a, args.pilot_steps
                         ),
                         f"{name}.log",
                     )
@@ -2947,17 +3020,15 @@ def main():
                 f"_n{args.pilot_steps}_s{cfg['seed']}"
             )
             if not pilot_complete(
-                name, args.pilot_steps, config=config, stage="b_oracle",
+                name, args.pilot_steps, config=stage_b_config, stage="b_oracle",
                 feedback=feedback, init=stage_a,
             ):
                 raise RuntimeError(f"pilot transaction incomplete after training: {name}")
             pilot_oracle[feedback] = last_metric(name)
             compact_completed_pilot(
-                name, args.pilot_steps, config=config, stage="b_oracle",
+                name, args.pilot_steps, config=stage_b_config, stage="b_oracle",
                 feedback=feedback, init=stage_a,
             )
-        stage_b_config = ROOT / "configs" / f"stage_b_{args.protocol}.yaml"
-        stage_b_cfg = yaml.safe_load(stage_b_config.read_text())
         decision = {
             "protocol": args.protocol,
             "stage": "ORACLE_PILOT_COMPLETE",
@@ -2965,6 +3036,16 @@ def main():
             "pilot_steps": args.pilot_steps,
             "pilot_oracle": pilot_oracle,
             "pilot_authority": "PIPELINE_ONLY_NO_SCIENTIFIC_GATE",
+            "stage_b_runtime": {
+                "manifest": str(runtime_bundle.manifest_path),
+                "manifest_sha256": runtime_bundle.manifest_sha256,
+                "config": str(runtime_bundle.main_config),
+                "config_sha256": runtime_bundle.main_config_sha256,
+                "micro_batch": runtime_bundle.micro_batch,
+                "accumulation": runtime_bundle.accumulation,
+                "effective_batch": runtime_bundle.effective_batch,
+                "workers": runtime_bundle.workers,
+            },
             "oracle_sign": "INCOMPLETE",
             "oracle_direction": "INCOMPLETE",
             "predicted_srsc": "INCOMPLETE",
@@ -3295,13 +3376,15 @@ def main():
                 f"_n{args.pilot_steps}_s{cfg['seed']}"
             )
             if not pilot_complete(
-                name, args.pilot_steps, config=config, stage="b_predicted",
+                name, args.pilot_steps, config=stage_b_config,
+                stage="b_predicted",
                 feedback=feedback, init=stage_a,
             ):
                 predicted_pilot_jobs.append(
                     (
                         train_command(
-                            config, "b_predicted", name, feedback, stage_a, args.pilot_steps
+                            stage_b_config, "b_predicted", name, feedback,
+                            stage_a, args.pilot_steps
                         ),
                         f"{name}.log",
                     )
@@ -3313,13 +3396,15 @@ def main():
                 f"_n{args.pilot_steps}_s{cfg['seed']}"
             )
             if not pilot_complete(
-                name, args.pilot_steps, config=config, stage="b_predicted",
+                name, args.pilot_steps, config=stage_b_config,
+                stage="b_predicted",
                 feedback=feedback, init=stage_a,
             ):
                 raise RuntimeError(f"pilot transaction incomplete after training: {name}")
             pilot_predicted[feedback] = last_metric(name)
             compact_completed_pilot(
-                name, args.pilot_steps, config=config, stage="b_predicted",
+                name, args.pilot_steps, config=stage_b_config,
+                stage="b_predicted",
                 feedback=feedback, init=stage_a,
             )
         predicted = {}
@@ -3697,7 +3782,9 @@ def main():
         # conditional on the complete main Stage-B passing and therefore does
         # not consume compute for a rejected representation.
         if args.protocol == "aio3":
-            run_aio3_capacity_robustness(decision, decision_path)
+            run_aio3_capacity_robustness(
+                decision, decision_path, runtime_bundle
+            )
 
         if args.stop_after_stage_b:
             decision.update({
@@ -4051,7 +4138,10 @@ def main():
             note("STAGE-C MECHANISM NO-GO: official test remains sealed")
             refresh_metrics_long(args.protocol, "stage_c_no_go")
             return 2
-        review_contract(f"{args.protocol}_before_official_test")
+        review_contract(
+            f"{args.protocol}_before_official_test",
+            extra_contracts=runtime_bundle.contract_paths,
+        )
         official_manifest_candidates = []
         for feedback in ("O0", "O1", "O2", "O7"):
             official_manifest_candidates.append({

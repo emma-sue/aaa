@@ -33,6 +33,6 @@ id_ed25519*
 *.lock
 
 # Local backup state; checkpoint metadata is tracked under recovery/
+.backup_daemon.lock
 .local_backup_state.json
 .checkpoint_hash_cache.json
-

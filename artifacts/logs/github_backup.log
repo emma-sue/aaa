@@ -41,3 +41,35 @@ https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0145-s0221535
 * Request took 12.207015344s
 * Request took 7m45.302987321s
 [2026-07-18T13:45:54.111939+00:00] backup iteration FAIL: RuntimeError('Checkpoint changed after snapshot: /root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt')
+{
+  "status": "PASS",
+  "files": 207,
+  "bytes": 29639471,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main cf7fa09] backup: reproducible snapshot 2026-07-18T13:46:26.935563+00:00
+ 10 files changed, 190 insertions(+), 30 deletions(-)
+* Request at 2026-07-18 21:46:27.01807103 +0800 CST m=+0.012287881
+* Request to https://api.github.com/
+* Request took 3.361345064s
+* Request at 2026-07-18 21:46:30.3799096 +0800 CST m=+3.374126531
+* Request to https://api.github.com/graphql
+* Request took 976.859941ms
+github.com
+  ✓ Logged in to github.com as emma-sue (/root/.config/gh/hosts.yml)
+  ✓ Git operations for github.com configured to use https protocol.
+  ✓ Token: *******************
+  
+[git config --global --replace-all credential.https://github.com.helper ]
+[git config --global --add credential.https://github.com.helper !/usr/bin/gh auth git-credential]
+To https://github.com/emma-sue/aaa.git
+   0e41cf8..cf7fa09  main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.
+* Request at 2026-07-18 21:46:40.626045161 +0800 CST m=+0.027441810
+* Request to https://api.github.com/repos/emma-sue/aaa/releases
+* Request took 2.521687194s
+https://github.com/emma-sue/aaa/releases/tag/resume-aio3-stage-a
+* Request at 2026-07-18 22:17:48.566055147 +0800 CST m=+0.023561048
+* Request to https://api.github.com/repos/emma-sue/aaa/releases
+* Request took 2.04955861s
+https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0115-s0187125

@@ -121,7 +121,9 @@ def test_frozen_manifest_rejects_candidate_or_checkpoint_drift(tmp_path, monkeyp
 
 def test_every_orchestrated_official_eval_passes_the_frozen_manifest():
     source = open(orchestrate.__file__).read()
-    official_section = source[source.index('review_contract(f"{args.protocol}_before_official_test")'):]
+    official_section = source[
+        source.index('f"{args.protocol}_before_official_test"'):
+    ]
     official_section = official_section[:official_section.index("# Additional OOD/local-composite")]
     assert "freeze_official_candidate_manifest" in official_section
     assert official_section.count('"--official-manifest", str(official_manifest)') == 2

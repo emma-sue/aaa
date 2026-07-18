@@ -47,10 +47,16 @@ def main() -> None:
             raise RuntimeError(f"Release SHA mismatch: expected {expected}, got {actual}")
         index = json.loads((args.root / "recovery/CHECKPOINTS.json").read_text())
         rows = [*index.get("top3", [])]
-        if index.get("resume_latest"):
-            rows.append(index["resume_latest"])
-        indexed = {row.get("sha256") for row in rows if row.get("release_tag") == args.tag}
-        if indexed and actual not in indexed:
+        for key in ("resume_uploaded", "resume_latest", "resume_local_latest"):
+            if index.get(key):
+                rows.append(index[key])
+        tagged = [
+            row for row in rows
+            if row.get("release_tag") == args.tag and row.get("asset_name") == args.asset
+        ]
+        if not tagged:
+            raise RuntimeError("Release tag/asset is absent from the Git checkpoint index")
+        if actual not in {row.get("sha256") for row in tagged}:
             raise RuntimeError("Release checkpoint does not match the Git checkpoint index")
         temp_destination = destination.with_name(destination.name + ".download")
         shutil.copy2(downloaded, temp_destination)
@@ -64,4 +70,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,4 +1,4 @@
-# Exact restore procedure
+# Checkpoint recovery procedure
 
 This procedure restores code and experiment state. It does not redistribute
 datasets or unlock the official test.
@@ -10,6 +10,11 @@ git clone https://github.com/emma-sue/aaa.git /root/autodl-tmp/srsc_lite_v12
 cd /root/autodl-tmp/srsc_lite_v12
 bash scripts/bootstrap_recovery.sh
 ```
+
+Install the versions in `environment/requirements-resume.txt` using the
+official PyTorch CUDA 12.1 wheel index, and install GitHub CLI before the
+Release download. Credentials are deliberately not stored in this repository;
+public Git data can be cloned without them.
 
 Relocating the repository changes absolute config/data contracts. Do not resume
 an old checkpoint from a different path and call it the same run.
@@ -30,7 +35,7 @@ or use official-test metrics to select a configuration.
 
 ## 3. Restore and verify a checkpoint
 
-For the latest exact-resume state:
+For the latest rolling continuation state:
 
 ```bash
 python scripts/restore_checkpoint_asset.py \
@@ -42,7 +47,24 @@ python scripts/restore_checkpoint_asset.py \
 
 For an immutable best model, use the tag and asset name in
 `recovery/CHECKPOINTS.json`. The restore tool checks the Release SHA sidecar,
-then verifies the minimum PyTorch checkpoint state on CPU.
+the Git-indexed tag/asset/digest, the checkpoint payload contract, and the bound
+Git commit/tree before deserializing the checkpoint on CPU.
+
+For a checkpoint whose `code` completeness is `present`, preserve the bound
+content commit from the current index, download first, and then detach to that
+code snapshot before running the trainer:
+
+```bash
+SNAPSHOT=$(python -c 'import json; print(json.load(open("recovery/CHECKPOINTS.json"))["resume_latest"]["git_snapshot_commit"])')
+git checkout --detach "$SNAPSHOT"
+```
+
+The downloaded `.pt` is untracked and remains in place. A legacy AIO-3 row
+marked `code: legacy_missing` can still provide a state-exact optimizer/RNG
+continuation with the recorded config, split and distributed runtime. Its bound
+Git commit is an audited recovery snapshot, not proof that the launch-time
+Python source was byte-identical; do not describe that case as exact code
+provenance.
 
 ## 4. Audit before GPU launch
 
@@ -75,4 +97,3 @@ bash scripts/launch_aio3_stage_a_4x4090.sh
 After recovery, verify that the first new step is monotonic and that there is no
 NaN/OOM/traceback. Record the new host, driver, GPUs, checkpoint SHA, and launch
 time in the experiment log.
-

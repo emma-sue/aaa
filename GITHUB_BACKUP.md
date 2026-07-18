@@ -10,8 +10,9 @@ repository history. Instead:
 2. `last.pt` is a rolling `resume-<protocol>-<stage>` Release asset, refreshed
    at locked validation, before shutdown, or at the configured hourly interval;
 3. each asset has a SHA256 sidecar and metadata JSON;
-4. `recovery/CHECKPOINTS.json` binds checkpoints to the config, split, metrics,
-   code snapshot, distributed runtime, and Release tag;
+4. `recovery/CHECKPOINTS.json` records the checkpoint's own config, split,
+   code/data and distributed-runtime contracts and binds them to a real Git
+   content commit/tree and Release tag;
 5. the Release must succeed before the Git checkpoint index is updated.
 
 The backup daemon refuses a public repository unless `--allow-public` is passed
@@ -54,10 +55,12 @@ external write. It is safe to run before GitHub CLI authentication is ready.
 ## Fail-closed rules
 
 - never copy a symlink, dataset, archive, checkpoint, `.env`, or credential;
+- make every exported mirror an exact allowlisted closed set, remove stale
+  files before commit, and reject any extra tracked path during verification;
 - scan every text file for common token/private-key patterns before copying;
 - reject any ordinary Git file larger than 95 MB;
 - never infer that a checkpoint uploaded successfully from a command exit alone:
-  compute and record SHA256 first;
+  compute and record SHA256 first, then verify the remote digest and size of the
+  checkpoint, sidecar, and metadata assets;
 - restore only to the exact project path for legacy AIO-3 continuation;
 - do not treat a GitHub backup as an official-test authorization or a result.
-

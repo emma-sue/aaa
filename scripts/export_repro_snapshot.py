@@ -9,7 +9,6 @@ import json
 import os
 import platform
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -22,7 +21,7 @@ TEXT_SUFFIXES = {
 }
 MAX_GIT_FILE_BYTES = 95 * 1024 * 1024
 TOP_LEVEL_FILES = {
-    ".gitignore", "README.md", "GITHUB_BACKUP.md", "RUNNING_STATUS.md",
+    ".gitignore", "LICENSE.md", "README.md", "GITHUB_BACKUP.md", "RUNNING_STATUS.md",
     "STOP_REASON.md", "DISCONNECT_RECOVERY.md",
 }
 TREE_ROOTS = ("src", "scripts", "configs", "tests", "reports", "environment", "recovery")
@@ -46,12 +45,6 @@ DOC_CONTRACTS = {
         Path("docs/contracts/ResearchStudio_DOGC_Codex_最终方案.md"),
     Path("/root/ResearchStudio/ideaspark_run/end-to-end-restoration-state-feedback/srsc_lite_v1_2_reassessment.md"):
         Path("vendor/researchstudio/srsc_lite_v1_2_reassessment.md"),
-    Path("/root/ResearchStudio/ResearchStudio-Idea/skills/idea_spark/SKILL.md"):
-        Path("vendor/researchstudio/idea_spark_SKILL.md"),
-    Path("/root/.codex/skills/autosota/SKILL.md"):
-        Path("vendor/autosota/SKILL.md"),
-    Path("/root/R2R/utils/schedulers.py"): Path("vendor/r2r/utils/schedulers.py"),
-    Path("/root/R2R/utils/image_utils.py"): Path("vendor/r2r/utils/image_utils.py"),
 }
 SECRET_PATTERNS = (
     re.compile(rb"gh[pousr]_[A-Za-z0-9_]{20,}"),
@@ -65,6 +58,11 @@ SECRET_PATTERNS = (
     ),
 )
 FORBIDDEN_NAME_PARTS = (".env", "credential", "private_key", "id_rsa", "id_ed25519")
+LOCAL_CONTROL_FILES = {
+    ".backup_daemon.lock",
+    ".checkpoint_hash_cache.json",
+    ".local_backup_state.json",
+}
 
 
 def utc() -> str:
@@ -146,21 +144,111 @@ def stable_checkpoint_record(path: Path, cache: dict[str, object]) -> dict[str, 
     after = path.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise RuntimeError(f"Checkpoint changed while hashing; retry later: {path}")
-    cache[key] = {"size": after.st_size, "mtime_ns": after.st_mtime_ns, "sha256": digest}
+    cached_contract = cached.get("checkpoint_contract")
+    if cached.get("sha256") == digest and isinstance(cached_contract, dict):
+        checkpoint_contract = cached_contract
+    else:
+        checkpoint_contract = checkpoint_payload_contract(path, after)
+    cache[key] = {
+        "size": after.st_size,
+        "mtime_ns": after.st_mtime_ns,
+        "sha256": digest,
+        "checkpoint_contract": checkpoint_contract,
+    }
     return {
         "path": str(path.relative_to(path.parents[3])),
         "absolute_source_path": str(path),
         "size": after.st_size,
         "mtime_ns": after.st_mtime_ns,
         "sha256": digest,
+        "checkpoint_contract": checkpoint_contract,
     }
+
+
+def _json_contract(value: object, field: str) -> object:
+    """Accept only deterministic JSON metadata from a checkpoint payload."""
+    try:
+        return json.loads(json.dumps(value, sort_keys=True))
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(f"Checkpoint {field} is not JSON-serializable") from error
+
+
+def checkpoint_payload_contract(path: Path, expected_stat: os.stat_result) -> dict[str, object]:
+    """Read provenance without retaining tensor storage in the backup index."""
+    try:
+        import torch
+
+        payload = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
+    except Exception as error:
+        raise RuntimeError(f"Cannot read checkpoint provenance: {path}") from error
+    after = path.stat()
+    if (
+        after.st_size != expected_stat.st_size
+        or after.st_mtime_ns != expected_stat.st_mtime_ns
+    ):
+        raise RuntimeError(f"Checkpoint changed while reading provenance: {path}")
+    runtime = payload.get("runtime_contract")
+    distributed = payload.get("distributed_runtime")
+    contract = {
+        "schema_version": 1,
+        "epoch": int(payload.get("epoch", -1)),
+        "step": int(payload.get("step", -1)),
+        "batch_in_epoch": int(payload.get("batch_in_epoch", -1)),
+        "config_sha256": payload.get("config_sha256"),
+        "split_manifest_sha256": payload.get("split_manifest_sha256"),
+        "training_origin": payload.get("training_origin"),
+        "distributed_runtime": _json_contract(distributed, "distributed_runtime"),
+        "runtime_contract": _json_contract(runtime, "runtime_contract"),
+        "data_contract": _json_contract(payload.get("data_contract"), "data_contract"),
+        "code_contract": _json_contract(payload.get("code_contract"), "code_contract"),
+        "run_name": (payload.get("args") or {}).get("run_name"),
+        "stage": (payload.get("args") or {}).get("stage"),
+    }
+    contract["completeness"] = {
+        "runtime": "present" if runtime is not None or distributed is not None else "missing",
+        "data": "present" if contract["data_contract"] is not None else "legacy_missing",
+        "code": "present" if contract["code_contract"] is not None else "legacy_missing",
+    }
+    return contract
+
+
+def purge_unexpected_destination_files(destination: Path, expected: set[str]) -> None:
+    """Make the mirror an exact closed set instead of an additive copy tree."""
+    preserve = expected | LOCAL_CONTROL_FILES | {"recovery/SNAPSHOT_MANIFEST.json"}
+    candidates = sorted(
+        destination.rglob("*"), key=lambda item: len(item.relative_to(destination).parts),
+        reverse=True,
+    )
+    for path in candidates:
+        relative = path.relative_to(destination)
+        if relative.parts and relative.parts[0] == ".git":
+            continue
+        rendered = relative.as_posix()
+        if path.is_symlink():
+            path.unlink()
+        elif path.is_file() and rendered not in preserve:
+            path.unlink()
+        elif path.is_dir():
+            try:
+                path.rmdir()
+            except OSError:
+                pass
 
 
 def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
     run_name = "aio3_stage_a_coarse_seed1415926"
     run_dir = source / "artifacts/checkpoints" / run_name
+    config_path = source / "configs/protocol_aio3.yaml"
+    split_path = source / "artifacts/manifests/locked_split_aio3.json"
+    config_sha256 = file_sha256(config_path)
+    split_sha256 = file_sha256(split_path)
     top3_path = run_dir / "top3.json"
     top3 = json.loads(top3_path.read_text()) if top3_path.exists() else []
+    previous_index_path = destination / "recovery/CHECKPOINTS.json"
+    try:
+        previous_index = json.loads(previous_index_path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        previous_index = {}
     cache_path = destination / ".checkpoint_hash_cache.json"
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     state_path = destination / ".local_backup_state.json"
@@ -185,6 +273,10 @@ def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
                 else "planned"
             ),
         })
+        validate_checkpoint_record(
+            record, source, run_name, config_sha256, split_sha256,
+            expected_epoch=int(row["epoch"]), expected_step=int(row["step"]),
+        )
         records.append(record)
     last_path = run_dir / "last.pt"
     resume = stable_checkpoint_record(last_path, cache) if last_path.exists() else None
@@ -198,6 +290,31 @@ def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
                 else "planned"
             ),
         })
+        validate_checkpoint_record(resume, source, run_name, config_sha256, split_sha256)
+    uploaded_resume = None
+    uploaded_resume_sha = upload_state.get("resume_sha256")
+    if uploaded_resume_sha:
+        if resume is not None and resume.get("sha256") == uploaded_resume_sha:
+            uploaded_resume = dict(resume)
+        else:
+            previous_candidates = [
+                previous_index.get("resume_uploaded"),
+                previous_index.get("resume_latest"),
+                previous_index.get("resume_local_latest"),
+            ]
+            uploaded_resume = next(
+                (dict(row) for row in previous_candidates
+                 if (
+                     isinstance(row, dict)
+                     and row.get("sha256") == uploaded_resume_sha
+                     and isinstance(row.get("checkpoint_contract"), dict)
+                     and isinstance(row.get("git_snapshot_commit"), str)
+                     and isinstance(row.get("git_snapshot_tree"), str)
+                 )),
+                None,
+            )
+        if uploaded_resume is not None:
+            uploaded_resume["release_state"] = "uploaded"
     atomic_write(cache_path, (json.dumps(cache, indent=2, sort_keys=True) + "\n").encode())
     return {
         "schema_version": 1,
@@ -206,16 +323,71 @@ def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
         "ordinary_git_contains_checkpoints": False,
         "top3": records,
         "current_best": records[0] if records else None,
-        "resume_latest": resume,
+        # `resume_latest` always means the newest remotely recoverable asset.
+        # The live file may advance while a 304MB upload is in flight, so keep
+        # that separate as `resume_local_latest` until its Release succeeds.
+        "resume_latest": uploaded_resume or resume,
+        "resume_uploaded": uploaded_resume,
+        "resume_local_latest": resume,
         "config": {
             "path": "configs/protocol_aio3.yaml",
-            "sha256": file_sha256(source / "configs/protocol_aio3.yaml"),
+            "sha256": config_sha256,
         },
         "split_manifest": {
             "path": "artifacts/manifests/locked_split_aio3.json",
-            "sha256": file_sha256(source / "artifacts/manifests/locked_split_aio3.json"),
+            "sha256": split_sha256,
         },
     }
+
+
+def validate_checkpoint_record(
+    record: dict[str, object],
+    source: Path,
+    run_name: str,
+    config_sha256: str,
+    split_sha256: str,
+    expected_epoch: int | None = None,
+    expected_step: int | None = None,
+) -> None:
+    contract = record.get("checkpoint_contract")
+    if not isinstance(contract, dict):
+        raise RuntimeError("Checkpoint record has no payload contract")
+    checks = {
+        "run_name": contract.get("run_name") == run_name,
+        "stage": contract.get("stage") == "a",
+        "config_sha256": contract.get("config_sha256") == config_sha256,
+        "split_manifest_sha256": contract.get("split_manifest_sha256") == split_sha256,
+    }
+    if expected_epoch is not None:
+        checks["epoch"] = int(contract.get("epoch", -1)) == expected_epoch
+    if expected_step is not None:
+        checks["step"] = int(contract.get("step", -1)) == expected_step
+    code_contract = contract.get("code_contract")
+    if isinstance(code_contract, dict):
+        checks["code_contract_files"] = all(
+            isinstance(relative, str)
+            and isinstance(expected, str)
+            and (source / relative).is_file()
+            and file_sha256(source / relative) == expected
+            for relative, expected in code_contract.items()
+        )
+    data_contract = contract.get("data_contract")
+    if isinstance(data_contract, dict):
+        for path_key, digest_key in (
+            ("materialization_manifest", "materialization_manifest_sha256"),
+            ("split_manifest", "split_manifest_sha256"),
+        ):
+            contract_path = data_contract.get(path_key)
+            expected_digest = data_contract.get(digest_key)
+            checks[f"data_{path_key}"] = bool(
+                isinstance(contract_path, str)
+                and isinstance(expected_digest, str)
+                and Path(contract_path).is_file()
+                and file_sha256(Path(contract_path)) == expected_digest
+            )
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    if failed:
+        raise RuntimeError(f"Checkpoint payload/index provenance mismatch: {failed}")
 
 
 def environment_record() -> dict[str, object]:
@@ -275,11 +447,6 @@ def build_snapshot(source: Path, destination: Path) -> dict[str, object]:
         relative = Path("vendor/promptir_data_dir") / path.relative_to(promptir_lists)
         copied[str(relative)] = copy_checked(path, destination / relative)
 
-    r2r_lists = Path("/root/R2R/data_dir")
-    for path in iter_tree(r2r_lists):
-        relative = Path("vendor/r2r/data_dir") / path.relative_to(r2r_lists)
-        copied[str(relative)] = copy_checked(path, destination / relative)
-
     for source_doc, relative in DOC_CONTRACTS.items():
         if source_doc.exists():
             copied[str(relative)] = copy_checked(source_doc, destination / relative)
@@ -301,6 +468,7 @@ def build_snapshot(source: Path, destination: Path) -> dict[str, object]:
     }
     payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
     atomic_write(destination / "recovery/SNAPSHOT_MANIFEST.json", payload)
+    purge_unexpected_destination_files(destination, set(copied))
     return {"files": len(copied), "bytes": sum(int(v["size"]) for v in copied.values())}
 
 

@@ -119,7 +119,9 @@ def test_orchestrator_has_non_authoritative_pilot_and_formal_gates():
     assert "direction_weights_from_coordinates(coords, target_mode)" in trainer
     assert 'for feedback in ("O6", "O7", "O12")' in source
     assert '"capacity_robustness_rule": "P7>P6 and P7>P12; no hyperparameter search"' in source
-    assert source.index("if not predicted_go:") < source.rindex("run_aio3_capacity_robustness(decision")
+    assert source.index("if not predicted_go:") < source.rindex(
+        "run_aio3_capacity_robustness("
+    )
     assert '("O13", "full_e_projected_diagnostic")' in source
     assert '("O14", "direct_gt_correction_ceiling")' in source
     assert "DIAGNOSTIC_OR_CEILING_ONLY_NOT_DEPLOYABLE_NOT_A_GO_CRITERION" in source
@@ -281,9 +283,7 @@ def test_both_stage_b_contracts_freeze_before_first_full_orchestration():
     source = (ROOT / "scripts/orchestrate.py").read_text()
     assert '"--stop-after-stage-b"' in source
     assert '"stage": "STAGE_B_COMPLETE"' in source
-    capacity_call = source.index(
-        "run_aio3_capacity_robustness(decision, decision_path)"
-    )
+    capacity_call = source.index("run_aio3_capacity_robustness(", source.index("def main"))
     stop_gate = source.index("if args.stop_after_stage_b:", capacity_call)
     baseline_start = source.index("baseline_models = {}", stop_gate)
     assert capacity_call < stop_gate < baseline_start
@@ -543,10 +543,11 @@ def test_stage_a_cache_and_statistics_precede_every_stage_b_contract_review():
     )
     main_cache = source.index("ensure_stage_a_locked_val_cache(", main_select)
     main_stats = source.index("ensure_coordinate_stats(", main_cache)
+    main_runtime = source.index("ensure_stage_b_runtime_bundle(", main_stats)
     main_review = source.index(
-        'review_contract(f"{args.protocol}_before_stage_b")', main_stats
+        'f"{args.protocol}_before_stage_b"', main_runtime
     )
-    assert main_select < main_cache < main_stats < main_review
+    assert main_select < main_cache < main_stats < main_runtime < main_review
 
     capacity_select = source.index(
         'note(f"SELECT 10/10 Stage-A locked-val checkpoint `{stage_a}`")'
@@ -554,7 +555,7 @@ def test_stage_a_cache_and_statistics_precede_every_stage_b_contract_review():
     capacity_cache = source.index("ensure_stage_a_locked_val_cache(", capacity_select)
     capacity_stats = source.index("ensure_coordinate_stats(", capacity_cache)
     capacity_review = source.index(
-        'review_contract("aio3_before_capacity_10_10_stage_b")', capacity_stats
+        '"aio3_before_capacity_10_10_stage_b"', capacity_stats
     )
     assert capacity_select < capacity_cache < capacity_stats < capacity_review
 

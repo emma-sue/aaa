@@ -1,7 +1,7 @@
 # Stage-A Report
 
 Status: **IN_PROGRESS**  
-Latest committed locked validation: epoch `145`, step `221535`.  
+Latest committed locked validation: epoch `150`, step `227270`.  
 Best five-setting mean PSNR: **34.1973872016 dB** at epoch `145`, step `221535`.  
 Best three-task macro PSNR: **35.3004437544 dB**.  
 Best checkpoint: `/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt`  

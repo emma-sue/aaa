@@ -9,7 +9,7 @@ crop_size: 128
 micro_batch: 15
 accumulation: 8
 effective_batch: 120
-workers: 24
+workers: 8
 epochs: 30
 warmup_epochs: 3
 warmup_start_lr: 0.0000001

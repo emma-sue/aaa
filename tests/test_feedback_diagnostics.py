@@ -273,7 +273,8 @@ def _write_complete_cache_fixture(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate, "ROOT", tmp_path)
     monkeypatch.setattr(orchestrate, "CODE_ROOT", tmp_path)
     relative_code = set(orchestrate.FEEDBACK_DIAGNOSTIC_CODE_RELATIVE_PATHS) | {
-        "src/losses/objectives.py"
+        "src/losses/objectives.py",
+        "scripts/stage_b_runtime.py",
     }
     for relative in relative_code:
         path = tmp_path / relative

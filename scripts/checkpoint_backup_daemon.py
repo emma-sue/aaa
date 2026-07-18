@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -47,6 +48,26 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def acquire_daemon_lock(mirror: Path):
+    """Hold a process-lifetime lock so two daemons cannot clobber one Release."""
+    mirror.mkdir(parents=True, exist_ok=True)
+    handle = (mirror / ".backup_daemon.lock").open("a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        handle.close()
+        raise RuntimeError(f"Another backup daemon owns {mirror}") from error
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid={os.getpid()} started={utc()}\n")
+    handle.flush()
+    return handle
+
+
 def initialize_git(mirror: Path, repo: str | None) -> None:
     if not (mirror / ".git").exists():
         run(["git", "init", "-b", "main"], cwd=mirror)
@@ -78,6 +99,66 @@ def commit_snapshot(mirror: Path) -> str:
     return run(["git", "rev-parse", "HEAD"], cwd=mirror, capture=True).stdout.strip()
 
 
+def bind_checkpoint_index_to_commit(mirror: Path, snapshot_commit: str) -> None:
+    """Bind checkpoint metadata to the preceding immutable content commit.
+
+    A commit cannot contain its own hash.  The exporter is therefore committed
+    first, then this binding is recorded in a second commit.  The bound commit
+    contains the exact code/config snapshot, while the following commit contains
+    the recovery index that names it.
+    """
+    tree = run(
+        ["git", "rev-parse", f"{snapshot_commit}^{{tree}}"], cwd=mirror, capture=True,
+    ).stdout.strip()
+    index_path = mirror / "recovery/CHECKPOINTS.json"
+    index = json.loads(index_path.read_text())
+    binding = {"commit": snapshot_commit, "tree": tree}
+    index["git_snapshot"] = binding
+    rows: list[dict[str, object]] = []
+    rows.extend(row for row in index.get("top3", []) if isinstance(row, dict))
+    for key in (
+        "current_best", "resume_latest", "resume_uploaded", "resume_local_latest",
+    ):
+        row = index.get(key)
+        if isinstance(row, dict):
+            rows.append(row)
+    for row in rows:
+        if not isinstance(row.get("checkpoint_contract"), dict):
+            raise RuntimeError("Checkpoint row has no payload contract")
+        if (
+            row.get("release_state") == "uploaded"
+            and isinstance(row.get("git_snapshot_commit"), str)
+            and isinstance(row.get("git_snapshot_tree"), str)
+        ):
+            # A rolling resume asset may refer to the previous generation while
+            # live last.pt has already advanced. Preserve that generation's
+            # original code binding rather than rebinding history to HEAD.
+            continue
+        row["git_snapshot_commit"] = snapshot_commit
+        row["git_snapshot_tree"] = tree
+    index_payload = (json.dumps(index, indent=2, sort_keys=True) + "\n").encode()
+    temporary = index_path.with_name(index_path.name + ".tmp")
+    temporary.write_bytes(index_payload)
+    temporary.replace(index_path)
+
+    manifest_path = mirror / "recovery/SNAPSHOT_MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["recovery/CHECKPOINTS.json"] = {
+        "sha256": sha256_bytes(index_payload), "size": len(index_payload),
+    }
+    manifest_payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+    temporary = manifest_path.with_name(manifest_path.name + ".tmp")
+    temporary.write_bytes(manifest_payload)
+    temporary.replace(manifest_path)
+
+
+def commit_bound_snapshot(mirror: Path) -> tuple[str, str]:
+    snapshot_commit = commit_snapshot(mirror)
+    bind_checkpoint_index_to_commit(mirror, snapshot_commit)
+    binding_commit = commit_snapshot(mirror)
+    return snapshot_commit, binding_commit
+
+
 def ensure_gh_repo(repo: str, allow_public: bool) -> None:
     if shutil.which("gh") is None:
         raise RuntimeError("GitHub CLI `gh` is not installed")
@@ -106,14 +187,37 @@ def release_exists(repo: str, tag: str) -> bool:
     ).returncode == 0
 
 
-def release_asset_names(repo: str, tag: str) -> set[str]:
+def release_assets(repo: str, tag: str) -> dict[str, dict[str, object]]:
     if not release_exists(repo, tag):
-        return set()
+        return {}
     payload = json.loads(run_network(
-        ["gh", "release", "view", tag, "--repo", repo, "--json", "assets"],
-        capture=True,
+        ["gh", "api", f"repos/{repo}/releases/tags/{tag}"], capture=True,
     ).stdout)
-    return {str(asset["name"]) for asset in payload.get("assets", [])}
+    return {str(asset["name"]): asset for asset in payload.get("assets", [])}
+
+
+def asset_matches(row: dict[str, object] | None, digest: str, size: int) -> bool:
+    return bool(
+        row
+        and row.get("state") == "uploaded"
+        and int(row.get("size", -1)) == int(size)
+        and row.get("digest") == f"sha256:{digest}"
+    )
+
+
+def verify_remote_release_assets(
+    repo: str, tag: str, expected: dict[str, tuple[str, int]],
+) -> None:
+    payload = json.loads(run_network(
+        ["gh", "api", f"repos/{repo}/releases/tags/{tag}"], capture=True,
+    ).stdout)
+    assets = {str(asset["name"]): asset for asset in payload.get("assets", [])}
+    mismatches = [
+        name for name, (digest, size) in expected.items()
+        if not asset_matches(assets.get(name), digest, size)
+    ]
+    if mismatches:
+        raise RuntimeError(f"Release assets incomplete or digest-mismatched: {tag}/{mismatches}")
 
 
 def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
@@ -122,26 +226,49 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
     tag = str(row["release_tag"])
     with tempfile.TemporaryDirectory(prefix="srsc_upload_") as temp:
         temp_path = Path(temp)
+        sidecar = temp_path / (str(row["asset_name"]) + ".sha256")
+        sidecar.write_text(f"{expected}  {row['asset_name']}\n")
+        metadata = temp_path / (str(row["asset_name"]) + ".json")
+        metadata.write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
+        sidecar_digest = sha256(sidecar)
+        metadata_digest = sha256(metadata)
+        expected_assets = {
+            str(row["asset_name"]): (expected, int(row["size"])),
+            sidecar.name: (sidecar_digest, sidecar.stat().st_size),
+            metadata.name: (metadata_digest, metadata.stat().st_size),
+        }
+        existing = release_assets(repo, tag)
+        if immutable and existing:
+            main = existing.get(str(row["asset_name"]))
+            if main and not asset_matches(main, expected, int(row["size"])):
+                raise RuntimeError(f"Immutable checkpoint asset drift: {tag}/{row['asset_name']}")
+            if all(
+                asset_matches(existing.get(name), digest, size)
+                for name, (digest, size) in expected_assets.items()
+            ):
+                return
+            if main:
+                run_network([
+                    "gh", "release", "upload", tag, str(sidecar), str(metadata),
+                    "--repo", repo, "--clobber",
+                ], capture=True)
+                verify_remote_release_assets(repo, tag, expected_assets)
+                return
         asset = stage_asset(source, temp_path)
         actual = sha256(asset)
         if actual != expected:
             raise RuntimeError(f"Checkpoint changed after snapshot: {source}")
-        sidecar = temp_path / (str(row["asset_name"]) + ".sha256")
-        sidecar.write_text(f"{actual}  {row['asset_name']}\n")
-        metadata = temp_path / (str(row["asset_name"]) + ".json")
-        metadata.write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
-        required_assets = {asset.name, sidecar.name, metadata.name}
-        if immutable and required_assets.issubset(release_asset_names(repo, tag)):
-            return
         if not release_exists(repo, tag):
+            target = str(row.get("git_snapshot_commit") or "main")
             run_network([
-                "gh", "release", "create", tag, "--repo", repo, "--target", "main",
+                "gh", "release", "create", tag, "--repo", repo, "--target", target,
                 "--title", tag, "--notes", "SRSC checkpoint with SHA256-bound recovery metadata.",
             ])
         run_network([
             "gh", "release", "upload", tag, str(asset), str(sidecar), str(metadata),
             "--repo", repo, "--clobber",
         ], capture=True)
+        verify_remote_release_assets(repo, tag, expected_assets)
 
 
 def load_state(path: Path) -> dict[str, object]:
@@ -160,7 +287,11 @@ def iteration(args: argparse.Namespace) -> None:
         "--source", str(args.source), "--destination", str(args.mirror),
     ])
     initialize_git(args.mirror, None if args.local_only else args.repo)
-    commit_snapshot(args.mirror)
+    commit_bound_snapshot(args.mirror)
+    run([
+        "python", str(args.source / "scripts/verify_recovery_bundle.py"),
+        "--root", str(args.mirror),
+    ])
     if args.local_only:
         return
     ensure_gh_repo(args.repo, args.allow_public)
@@ -184,7 +315,7 @@ def iteration(args: argparse.Namespace) -> None:
         state["best_uploaded_utc"] = utc()
         save_state(state_path, state)
         uploaded = True
-    resume = index.get("resume_latest")
+    resume = index.get("resume_local_latest") or index.get("resume_latest")
     due = time.time() - float(state.get("resume_upload_unix", 0)) >= args.resume_interval_hours * 3600
     if resume and due and state.get("resume_sha256") != resume.get("sha256"):
         publish_release(args.repo, resume, immutable=False)
@@ -198,6 +329,7 @@ def iteration(args: argparse.Namespace) -> None:
     # without delaying the checkpoint needed for exact continuation.
     for best in index.get("top3", []):
         if best.get("sha256") in uploaded_best:
+            publish_release(args.repo, best, immutable=True)
             continue
         publish_release(args.repo, best, immutable=True)
         uploaded_best.add(str(best["sha256"]))
@@ -214,7 +346,11 @@ def iteration(args: argparse.Namespace) -> None:
             "python", str(args.source / "scripts/export_repro_snapshot.py"),
             "--source", str(args.source), "--destination", str(args.mirror),
         ])
-        commit_snapshot(args.mirror)
+        commit_bound_snapshot(args.mirror)
+        run([
+            "python", str(args.source / "scripts/verify_recovery_bundle.py"),
+            "--root", str(args.mirror),
+        ])
         run_network(["git", "push", "origin", "main"], cwd=args.mirror)
 
 
@@ -229,6 +365,7 @@ def main() -> None:
     parser.add_argument("--allow-public", action="store_true")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
+    daemon_lock = acquire_daemon_lock(args.mirror)
     while True:
         try:
             iteration(args)
@@ -240,6 +377,7 @@ def main() -> None:
         if args.once:
             break
         time.sleep(max(60, args.interval_seconds))
+    daemon_lock.close()
 
 
 if __name__ == "__main__":
