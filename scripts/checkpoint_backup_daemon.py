@@ -23,6 +23,22 @@ def run(command: list[str], cwd: Path | None = None, capture: bool = False) -> s
     return subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=capture)
 
 
+def run_network(
+    command: list[str], cwd: Path | None = None, capture: bool = False, attempts: int = 5,
+) -> subprocess.CompletedProcess[str]:
+    last_error: subprocess.CalledProcessError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return run(command, cwd=cwd, capture=capture)
+        except subprocess.CalledProcessError as error:
+            last_error = error
+            if attempt == attempts:
+                break
+            time.sleep(min(15, 2 * attempt))
+    assert last_error is not None
+    raise last_error
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -51,6 +67,7 @@ def initialize_git(mirror: Path, repo: str | None) -> None:
             run(["git", "remote", "add", "origin", remote], cwd=mirror)
         elif run(["git", "remote", "get-url", "origin"], cwd=mirror, capture=True).stdout.strip() != remote:
             raise RuntimeError("Existing origin does not match requested GitHub repository")
+        run(["git", "config", "http.version", "HTTP/1.1"], cwd=mirror)
 
 
 def commit_snapshot(mirror: Path) -> str:
@@ -65,7 +82,7 @@ def ensure_gh_repo(repo: str, allow_public: bool) -> None:
     if shutil.which("gh") is None:
         raise RuntimeError("GitHub CLI `gh` is not installed")
     run(["gh", "auth", "status"])
-    payload = json.loads(run(
+    payload = json.loads(run_network(
         ["gh", "repo", "view", repo, "--json", "isPrivate"], capture=True,
     ).stdout)
     visibility = "PRIVATE" if payload["isPrivate"] else "PUBLIC"
@@ -92,7 +109,7 @@ def release_exists(repo: str, tag: str) -> bool:
 def release_asset_names(repo: str, tag: str) -> set[str]:
     if not release_exists(repo, tag):
         return set()
-    payload = json.loads(run(
+    payload = json.loads(run_network(
         ["gh", "release", "view", tag, "--repo", repo, "--json", "assets"],
         capture=True,
     ).stdout)
@@ -117,11 +134,11 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
         if immutable and required_assets.issubset(release_asset_names(repo, tag)):
             return
         if not release_exists(repo, tag):
-            run([
+            run_network([
                 "gh", "release", "create", tag, "--repo", repo, "--target", "main",
                 "--title", tag, "--notes", "SRSC checkpoint with SHA256-bound recovery metadata.",
             ])
-        run([
+        run_network([
             "gh", "release", "upload", tag, str(asset), str(sidecar), str(metadata),
             "--repo", repo, "--clobber",
         ])
@@ -148,7 +165,7 @@ def iteration(args: argparse.Namespace) -> None:
         return
     ensure_gh_repo(args.repo, args.allow_public)
     run(["gh", "auth", "setup-git"])
-    run(["git", "push", "-u", "origin", "main"], cwd=args.mirror)
+    run_network(["git", "push", "-u", "origin", "main"], cwd=args.mirror)
 
     index = json.loads((args.mirror / "recovery/CHECKPOINTS.json").read_text())
     state_path = args.mirror / ".local_backup_state.json"
@@ -179,7 +196,7 @@ def iteration(args: argparse.Namespace) -> None:
             "--source", str(args.source), "--destination", str(args.mirror),
         ])
         commit_snapshot(args.mirror)
-        run(["git", "push", "origin", "main"], cwd=args.mirror)
+        run_network(["git", "push", "origin", "main"], cwd=args.mirror)
 
 
 def main() -> None:

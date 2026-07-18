@@ -34,16 +34,16 @@
       "size": 631
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "c82ba073b4d14d0218f259227585adbf9b4ceed18089659b0cc3894912ef8fb9",
-      "size": 531769
+      "sha256": "41e859259c062681f90f20c8c3ac0d0b9f1981595d64f53520628bfa3ef22a43",
+      "size": 532013
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "365c81f8cb62420ca8a35a0dc9ce75ca6d4e250edc68a4911f3b188ab562bd98",
-      "size": 428386
+      "sha256": "82fa43bcd2849cccfdb33157e61a7002489eb1b3754bfcec3ca8a7525001e218",
+      "size": 428800
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -66,8 +66,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "63de39c2d7e4d9577295eef02cd5d9d3b86f1f6be42338a7ac2ddad15f27a3b0",
-      "size": 428536
+      "sha256": "b072ece521d99864b561c6bd5ec0a83a570cabfb372c94edd84c8c70050f71ba",
+      "size": 428950
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -382,11 +382,11 @@
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "0fe3372d786b8f734510082acc2c1473748588a4c626aa8beeba79f14a74540e",
+      "sha256": "d19efbb87cb2b22cbc1d2a8a8659ae35cfbebb91debecf7df5fb35f70c58507f",
       "size": 4076
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "2bdd62b3ce76617a4b419d3eba3cfbf48a111e9aed36c7841ae65be2c8fdac4f",
+      "sha256": "e332974c23b25cee330f9fd080f9f2eb7ec55de33027e36334e8d2741fdc08c6",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -458,8 +458,8 @@
       "size": 31939
     },
     "scripts/checkpoint_backup_daemon.py": {
-      "sha256": "8c92a2f36e2908bce922d20fc3fb39db581166ef3b871de4bc2bc3ffc5f2c18d",
-      "size": 8343
+      "sha256": "4409a7dc27a40cd17e3ea8a773b8444e1c77448c8e7649c3f7a901f3246e781b",
+      "size": 9029
     },
     "scripts/compare_locked_paired.py": {
       "sha256": "cdd8448ccf43f85f0a82b37158d0b21f432d53bdfe5080b90c3ff2603249e8aa",
@@ -830,7 +830,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T13:33:41.525652+00:00",
+  "generated_utc": "2026-07-18T13:34:14.239886+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }
