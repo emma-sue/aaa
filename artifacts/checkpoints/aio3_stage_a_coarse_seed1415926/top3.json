@@ -1,0 +1,20 @@
+[
+  {
+    "score": 34.19738720161497,
+    "epoch": 145,
+    "step": 221535,
+    "checkpoint": "val_epoch145_step0221535.pt"
+  },
+  {
+    "score": 34.18833113264535,
+    "epoch": 125,
+    "step": 198595,
+    "checkpoint": "val_epoch125_step0198595.pt"
+  },
+  {
+    "score": 34.158262619896576,
+    "epoch": 155,
+    "step": 233005,
+    "checkpoint": "val_epoch155_step0233005.pt"
+  }
+]

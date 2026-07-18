@@ -13,7 +13,7 @@ from pathlib import Path
 
 def upload_process_active() -> bool:
     result = subprocess.run(
-        ["pgrep", "-f", "^gh release upload (best|resume)-aio3"],
+        ["pgrep", "-f", "^gh release upload "],
         text=True, capture_output=True,
     )
     return result.returncode == 0 and bool(result.stdout.strip())
@@ -21,19 +21,12 @@ def upload_process_active() -> bool:
 
 def transaction_complete(mirror: Path, source: Path) -> bool:
     state_path = mirror / ".local_backup_state.json"
-    top3_path = source / "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json"
-    if not state_path.exists() or not top3_path.exists() or upload_process_active():
+    if not state_path.exists() or upload_process_active():
         return False
     try:
         state = json.loads(state_path.read_text())
-        top3 = json.loads(top3_path.read_text())
     except json.JSONDecodeError:
         return False
-    uploaded = set(state.get("best_sha256s", []))
-    if state.get("best_sha256"):
-        uploaded.add(str(state["best_sha256"]))
-    # Top3 JSON itself has no hashes. The mirror index binds each filename to
-    # its SHA and is only replaced atomically by the exporter.
     index_path = mirror / "recovery/CHECKPOINTS.json"
     if not index_path.exists():
         return False
@@ -41,12 +34,38 @@ def transaction_complete(mirror: Path, source: Path) -> bool:
         index = json.loads(index_path.read_text())
     except json.JSONDecodeError:
         return False
-    live_names = {str(row["checkpoint"]) for row in top3}
-    required = {
-        str(row["sha256"]) for row in index.get("top3", [])
-        if str(row.get("asset_name")) in live_names
-    }
-    return bool(state.get("resume_sha256")) and required.issubset(uploaded)
+    runs = index.get("runs")
+    if not isinstance(runs, dict) or not runs:
+        return False
+    state_runs = state.get("runs") if isinstance(state.get("runs"), dict) else {}
+    for run_name, run in runs.items():
+        if not isinstance(run, dict) or not run.get("publish_large_assets", True):
+            continue
+        run_state = dict(state_runs.get(run_name, {}))
+        if run_name == "aio3_stage_a_coarse_seed1415926":
+            for key in ("best_sha256", "best_sha256s", "resume_sha256"):
+                if key in state and key not in run_state:
+                    run_state[key] = state[key]
+        best = set(run_state.get("best_sha256s", []))
+        if run_state.get("best_sha256"):
+            best.add(str(run_state["best_sha256"]))
+        formal = set(run_state.get("formal_sha256s", []))
+        for row in run.get("top3", []):
+            if isinstance(row, dict) and row.get("sha256") not in best:
+                return False
+        head = run.get("formal_best") or run.get("current_best")
+        if isinstance(head, dict):
+            uploaded = formal if head.get("selection") == "formal-best-model" else best
+            if head.get("sha256") not in uploaded:
+                return False
+        resume = run.get("resume_local_latest") or run.get("resume_latest")
+        if (
+            isinstance(resume, dict)
+            and (resume.get("checkpoint_contract") or {}).get("resumable_training_state")
+            and not run_state.get("resume_sha256")
+        ):
+            return False
+    return True
 
 
 def wait_for_daemon_lock_release(mirror: Path, timeout_seconds: int = 60) -> None:

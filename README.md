@@ -29,6 +29,12 @@ Not tracked in Git:
 - `.pt/.ckpt` files. Large checkpoints are published separately as GitHub
   Release assets and are verified against `recovery/CHECKPOINTS.json`.
 
+This is an intentionally **public** research-recovery repository. It contains
+no dataset bytes and no credentials. The exporter uses a closed allowlist,
+rejects `.env`/credential-like names and common secret patterns, excludes all
+checkpoint binaries from ordinary Git, and fails before publication if a
+tracked file is outside the signed snapshot manifest.
+
 ## Recovery quick start
 
 Checkpoint continuation intentionally uses the original absolute project path,
@@ -49,8 +55,9 @@ python scripts/prepare_data.py --protocol aio3 --build
 python scripts/prepare_data.py --protocol aio5 --build
 ```
 
-Download and verify the rolling resume checkpoint (requires an authenticated
-GitHub CLI for a private release; public assets also work):
+Download and verify the rolling resume checkpoint. The repository and its
+Releases are public; GitHub CLI authentication may still be useful for API
+rate limits or account policy:
 
 ```bash
 python scripts/restore_checkpoint_asset.py \
@@ -72,6 +79,14 @@ be proved cryptographically. Its Git binding is an audited recovery snapshot,
 not retrospective proof of launch-time code identity. Checkpoints produced by
 the hardened trainer carry code and data contracts and receive the full
 Git-snapshot verification.
+
+`recovery/CHECKPOINTS.json` discovers only controlled AIO-3/AIO-5 Stage-A,
+formal Stage-B, Stage-C, pretrain and finetune run directories. For every
+publishable run it records the current locked-validation best, retained top-3,
+and a rolling `last.pt` only when model/optimizer/scheduler/RNG state is
+complete. Completed formal model-only checkpoints are immutable Releases.
+Smoke/debug/invalid/official-reproduction directories are excluded; bounded
+pilot models are hash-indexed for audit but never uploaded as large assets.
 
 ## Upstream pins
 

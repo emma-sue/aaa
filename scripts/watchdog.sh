@@ -21,7 +21,7 @@ while true; do
       --format=csv,noheader 2>&1 || true
     echo "TRAIN_PROCESSES"
     ps -eo pid,etimes,%cpu,%mem,stat,cmd | \
-      grep -E 'scripts/(orchestrate|train|train_stage_a_ddp|train_baseline_hybrid|train_baseline_hybrid_ddp|cache_stage_a_outputs|eval_locked|compute_coordinate_stats)\.py' | \
+      grep -E 'scripts/(orchestrate|train|train_stage_a_ddp|train_stage_a_capacity_hybrid_ddp|train_baseline_hybrid|train_baseline_hybrid_ddp|cache_stage_a_outputs|eval_locked|compute_coordinate_stats)\.py' | \
       grep -v grep || true
     echo "FILESYSTEM"
     df -h /root/autodl-tmp 2>&1 || true
@@ -79,14 +79,14 @@ while true; do
         scripts/export_metrics_long.py \
         scripts/compute_coordinate_stats.py \
         scripts/cache_stage_a_outputs.py scripts/train_baseline_hybrid.py \
-        scripts/train_baseline_hybrid_ddp.py \
+        scripts/train_baseline_hybrid_ddp.py scripts/train_stage_a_capacity_hybrid_ddp.py \
         scripts/compare_paired.py scripts/compare_r2r.py \
         scripts/launch_when_data_ready.sh scripts/reload_pipeline_at_checkpoint.sh scripts/watchdog.sh \
         scripts/verify_stage_a_checkpoint.py \
         artifacts/manifests/aio3.json artifacts/manifests/locked_split_aio3.json \
         configs/protocol_aio3.yaml configs/protocol_aio5.yaml \
         configs/protocol_aio3_baseline_hybrid.yaml \
-        configs/protocol_aio3_10_10.yaml \
+        configs/protocol_aio3_10_10.yaml configs/protocol_aio3_10_10_hybrid.yaml \
         configs/stage_b_aio3.yaml configs/stage_b_aio5.yaml \
         configs/stage_b_aio3_10_10.yaml \
         configs/stage_c_aio3.yaml configs/stage_c_aio5.yaml 2>&1 || true

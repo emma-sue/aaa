@@ -100,3 +100,36 @@ https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0115-s0187125
 To https://github.com/emma-sue/aaa.git
    cf7fa09..021c473  main -> main
 [2026-07-18T14:20:41.177041+00:00] backup iteration PASS
+{
+  "status": "PASS",
+  "files": 205,
+  "bytes": 27247346,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main 2b3d79f] backup: reproducible snapshot 2026-07-18T14:21:45.773682+00:00
+ 7 files changed, 52 insertions(+), 13 deletions(-)
+[main 7ee74ec] backup: reproducible snapshot 2026-07-18T14:21:45.864157+00:00
+ 2 files changed, 18 insertions(+), 2 deletions(-)
+{
+  "status": "PASS",
+  "manifest_files": 205,
+  "checkpoint": "",
+  "checkpoint_verification": null
+}
+* Request at 2026-07-18 22:21:46.056573285 +0800 CST m=+0.026758063
+* Request to https://api.github.com/
+* Request took 2.181314734s
+* Request at 2026-07-18 22:21:48.238309869 +0800 CST m=+2.208494634
+* Request to https://api.github.com/graphql
+* Request took 807.414343ms
+github.com
+  ✓ Logged in to github.com as emma-sue (/root/.config/gh/hosts.yml)
+  ✓ Git operations for github.com configured to use https protocol.
+  ✓ Token: *******************
+  
+[git config --global --replace-all credential.https://github.com.helper ]
+[git config --global --add credential.https://github.com.helper !/usr/bin/gh auth git-credential]
+To https://github.com/emma-sue/aaa.git
+   021c473..7ee74ec  main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.
+[2026-07-18T14:22:32.758615+00:00] backup iteration PASS

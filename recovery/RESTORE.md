@@ -46,16 +46,20 @@ python scripts/restore_checkpoint_asset.py \
 ```
 
 For an immutable best model, use the tag and asset name in
-`recovery/CHECKPOINTS.json`. The restore tool checks the Release SHA sidecar,
-the Git-indexed tag/asset/digest, the checkpoint payload contract, and the bound
-Git commit/tree before deserializing the checkpoint on CPU.
+`recovery/CHECKPOINTS.json` under `runs.<run-name>`. For example, later stages
+can add `--run <exact-run-name>` to disambiguate a tag/asset pair. The restore
+tool checks the Release SHA sidecar and metadata JSON, the Git-indexed
+run/tag/asset/digest, the checkpoint payload contract, and the bound Git
+commit/tree before deserializing the checkpoint on CPU. Entries marked
+`index_only_not_published` are bounded pilot audit records and cannot be
+restored from a Release.
 
 For a checkpoint whose `code` completeness is `present`, preserve the bound
 content commit from the current index, download first, and then detach to that
 code snapshot before running the trainer:
 
 ```bash
-SNAPSHOT=$(python -c 'import json; print(json.load(open("recovery/CHECKPOINTS.json"))["resume_latest"]["git_snapshot_commit"])')
+SNAPSHOT=$(python -c 'import json; x=json.load(open("recovery/CHECKPOINTS.json")); print(x["runs"]["aio3_stage_a_coarse_seed1415926"]["resume_latest"]["git_snapshot_commit"])')
 git checkout --detach "$SNAPSHOT"
 ```
 

@@ -8,12 +8,14 @@
     "asset_name": "val_epoch145_step0221535.pt",
     "checkpoint_contract": {
       "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
       "code_contract": null,
       "completeness": {
         "code": "legacy_missing",
         "data": "legacy_missing",
         "runtime": "present"
       },
+      "config_path": "configs/protocol_aio3.yaml",
       "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
       "data_contract": null,
       "distributed_runtime": {
@@ -24,47 +26,100 @@
         "world_size": 4
       },
       "epoch": 145,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",
       "runtime_contract": null,
+      "scheduler_state_present": true,
       "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+      "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+      "stage": "a",
+      "step": 221535,
+      "training_origin": null
+    },
+    "config": {
+      "path": "configs/protocol_aio3.yaml",
+      "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+    },
+    "embedded_checkpoint_contract": {
+      "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
+      "code_contract": null,
+      "completeness": {
+        "code": "legacy_missing",
+        "data": "legacy_missing",
+        "runtime": "present"
+      },
+      "config_path": "configs/protocol_aio3.yaml",
+      "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+      "data_contract": null,
+      "distributed_runtime": {
+        "accumulation": 1,
+        "backend": "nccl",
+        "global_effective_batch": 120,
+        "per_gpu_batch": 30,
+        "world_size": 4
+      },
+      "epoch": 145,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "runtime_contract": null,
+      "scheduler_state_present": true,
+      "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
       "step": 221535,
       "training_origin": null
     },
     "epoch": 145,
-    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
     "mtime_ns": 1784381838022252591,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
     "protocol": "aio3",
     "release_state": "uploaded",
     "release_tag": "best-aio3-stage-a-e0145-s0221535",
+    "run_contract": null,
     "run_name": "aio3_stage_a_coarse_seed1415926",
     "score": 34.19738720161497,
     "selection": "top3",
+    "selection_index": {
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+      "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+    },
     "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
     "size": 303986597,
+    "split_manifest": {
+      "path": "artifacts/manifests/locked_split_aio3.json",
+      "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+    },
     "stage": "a",
     "step": 221535
   },
-  "generated_utc": "2026-07-18T14:21:43.954780+00:00",
-  "git_snapshot": {
-    "commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-    "tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410"
-  },
+  "generated_utc": "2026-07-18T14:49:41.302514+00:00",
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "asset_name": "last.pt",
     "checkpoint_contract": {
       "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
       "code_contract": null,
       "completeness": {
         "code": "legacy_missing",
         "data": "legacy_missing",
         "runtime": "present"
       },
+      "config_path": "configs/protocol_aio3.yaml",
       "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
       "data_contract": null,
       "distributed_runtime": {
@@ -74,39 +129,98 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 151,
+      "epoch": 155,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",
       "runtime_contract": null,
+      "scheduler_state_present": true,
       "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 228417,
+      "step": 233005,
       "training_origin": null
     },
-    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
-    "mtime_ns": 1784384307584890292,
+    "config": {
+      "path": "configs/protocol_aio3.yaml",
+      "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+    },
+    "embedded_checkpoint_contract": {
+      "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
+      "code_contract": null,
+      "completeness": {
+        "code": "legacy_missing",
+        "data": "legacy_missing",
+        "runtime": "present"
+      },
+      "config_path": "configs/protocol_aio3.yaml",
+      "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+      "data_contract": null,
+      "distributed_runtime": {
+        "accumulation": 1,
+        "backend": "nccl",
+        "global_effective_batch": 120,
+        "per_gpu_batch": 30,
+        "world_size": 4
+      },
+      "epoch": 155,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "runtime_contract": null,
+      "scheduler_state_present": true,
+      "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+      "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+      "stage": "a",
+      "step": 233005,
+      "training_origin": null
+    },
+    "epoch": 155,
+    "mtime_ns": 1784385936265702521,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
     "release_tag": "resume-aio3-stage-a",
+    "run_contract": null,
     "run_name": "aio3_stage_a_coarse_seed1415926",
     "selection": "resume-last",
-    "sha256": "522b19ef76a314fbd8b8c8d802a3cc52524fc282c8375022b726480fba29b79b",
+    "selection_index": {
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+      "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+    },
+    "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
     "size": 303948065,
-    "stage": "a"
+    "split_manifest": {
+      "path": "artifacts/manifests/locked_split_aio3.json",
+      "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+    },
+    "stage": "a",
+    "step": 233005
   },
   "resume_local_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "asset_name": "last.pt",
     "checkpoint_contract": {
       "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
       "code_contract": null,
       "completeness": {
         "code": "legacy_missing",
         "data": "legacy_missing",
         "runtime": "present"
       },
+      "config_path": "configs/protocol_aio3.yaml",
       "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
       "data_contract": null,
       "distributed_runtime": {
@@ -116,30 +230,720 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 151,
+      "epoch": 155,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",
       "runtime_contract": null,
+      "scheduler_state_present": true,
       "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 228417,
+      "step": 233005,
       "training_origin": null
     },
-    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
-    "mtime_ns": 1784384307584890292,
+    "config": {
+      "path": "configs/protocol_aio3.yaml",
+      "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+    },
+    "embedded_checkpoint_contract": {
+      "batch_in_epoch": 0,
+      "checkpoint_kind": "resumable_training_state",
+      "code_contract": null,
+      "completeness": {
+        "code": "legacy_missing",
+        "data": "legacy_missing",
+        "runtime": "present"
+      },
+      "config_path": "configs/protocol_aio3.yaml",
+      "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+      "data_contract": null,
+      "distributed_runtime": {
+        "accumulation": 1,
+        "backend": "nccl",
+        "global_effective_batch": 120,
+        "per_gpu_batch": 30,
+        "world_size": 4
+      },
+      "epoch": 155,
+      "feedback": "O7",
+      "model_state_present": true,
+      "optimizer_state_present": true,
+      "resumable_training_state": true,
+      "rng_state_present": true,
+      "run_contract_sha256": null,
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "runtime_contract": null,
+      "scheduler_state_present": true,
+      "schema_version": 1,
+      "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+      "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+      "stage": "a",
+      "step": 233005,
+      "training_origin": null
+    },
+    "epoch": 155,
+    "mtime_ns": 1784385936265702521,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
     "release_tag": "resume-aio3-stage-a",
+    "run_contract": null,
     "run_name": "aio3_stage_a_coarse_seed1415926",
     "selection": "resume-last",
-    "sha256": "522b19ef76a314fbd8b8c8d802a3cc52524fc282c8375022b726480fba29b79b",
+    "selection_index": {
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+      "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+    },
+    "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
     "size": 303948065,
-    "stage": "a"
+    "split_manifest": {
+      "path": "artifacts/manifests/locked_split_aio3.json",
+      "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+    },
+    "stage": "a",
+    "step": 233005
   },
   "resume_uploaded": null,
-  "schema_version": 1,
+  "runs": {
+    "aio3_stage_a_coarse_seed1415926": {
+      "category": "stage_a",
+      "config": {
+        "path": "configs/protocol_aio3.yaml",
+        "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+      },
+      "current_best": {
+        "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+        "asset_name": "val_epoch145_step0221535.pt",
+        "checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 145,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 221535,
+          "training_origin": null
+        },
+        "config": {
+          "path": "configs/protocol_aio3.yaml",
+          "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+        },
+        "embedded_checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 145,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 221535,
+          "training_origin": null
+        },
+        "epoch": 145,
+        "mtime_ns": 1784381838022252591,
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+        "protocol": "aio3",
+        "release_state": "uploaded",
+        "release_tag": "best-aio3-stage-a-e0145-s0221535",
+        "run_contract": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "score": 34.19738720161497,
+        "selection": "top3",
+        "selection_index": {
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+          "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+        },
+        "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
+        "size": 303986597,
+        "split_manifest": {
+          "path": "artifacts/manifests/locked_split_aio3.json",
+          "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+        },
+        "stage": "a",
+        "step": 221535
+      },
+      "formal_best": null,
+      "pilot_model": null,
+      "protocol": "aio3",
+      "publish_large_assets": true,
+      "resume_latest": {
+        "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "asset_name": "last.pt",
+        "checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 155,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 233005,
+          "training_origin": null
+        },
+        "config": {
+          "path": "configs/protocol_aio3.yaml",
+          "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+        },
+        "embedded_checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 155,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 233005,
+          "training_origin": null
+        },
+        "epoch": 155,
+        "mtime_ns": 1784385936265702521,
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "protocol": "aio3",
+        "release_state": "planned",
+        "release_tag": "resume-aio3-stage-a",
+        "run_contract": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "selection": "resume-last",
+        "selection_index": {
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+          "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+        },
+        "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+        "size": 303948065,
+        "split_manifest": {
+          "path": "artifacts/manifests/locked_split_aio3.json",
+          "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+        },
+        "stage": "a",
+        "step": 233005
+      },
+      "resume_local_latest": {
+        "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "asset_name": "last.pt",
+        "checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 155,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 233005,
+          "training_origin": null
+        },
+        "config": {
+          "path": "configs/protocol_aio3.yaml",
+          "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+        },
+        "embedded_checkpoint_contract": {
+          "batch_in_epoch": 0,
+          "checkpoint_kind": "resumable_training_state",
+          "code_contract": null,
+          "completeness": {
+            "code": "legacy_missing",
+            "data": "legacy_missing",
+            "runtime": "present"
+          },
+          "config_path": "configs/protocol_aio3.yaml",
+          "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+          "data_contract": null,
+          "distributed_runtime": {
+            "accumulation": 1,
+            "backend": "nccl",
+            "global_effective_batch": 120,
+            "per_gpu_batch": 30,
+            "world_size": 4
+          },
+          "epoch": 155,
+          "feedback": "O7",
+          "model_state_present": true,
+          "optimizer_state_present": true,
+          "resumable_training_state": true,
+          "rng_state_present": true,
+          "run_contract_sha256": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "runtime_contract": null,
+          "scheduler_state_present": true,
+          "schema_version": 1,
+          "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+          "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+          "stage": "a",
+          "step": 233005,
+          "training_origin": null
+        },
+        "epoch": 155,
+        "mtime_ns": 1784385936265702521,
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "protocol": "aio3",
+        "release_state": "planned",
+        "release_tag": "resume-aio3-stage-a",
+        "run_contract": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "selection": "resume-last",
+        "selection_index": {
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+          "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+        },
+        "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+        "size": 303948065,
+        "split_manifest": {
+          "path": "artifacts/manifests/locked_split_aio3.json",
+          "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+        },
+        "stage": "a",
+        "step": 233005
+      },
+      "resume_uploaded": null,
+      "run_contract": null,
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "split_manifest": {
+        "path": "artifacts/manifests/locked_split_aio3.json",
+        "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+      },
+      "stage": "a",
+      "top3": [
+        {
+          "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+          "asset_name": "val_epoch145_step0221535.pt",
+          "checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 145,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 221535,
+            "training_origin": null
+          },
+          "config": {
+            "path": "configs/protocol_aio3.yaml",
+            "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+          },
+          "embedded_checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 145,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 221535,
+            "training_origin": null
+          },
+          "epoch": 145,
+          "mtime_ns": 1784381838022252591,
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+          "protocol": "aio3",
+          "release_state": "uploaded",
+          "release_tag": "best-aio3-stage-a-e0145-s0221535",
+          "run_contract": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "score": 34.19738720161497,
+          "selection": "top3",
+          "selection_index": {
+            "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+            "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+          },
+          "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
+          "size": 303986597,
+          "split_manifest": {
+            "path": "artifacts/manifests/locked_split_aio3.json",
+            "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+          },
+          "stage": "a",
+          "step": 221535
+        },
+        {
+          "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
+          "asset_name": "val_epoch125_step0198595.pt",
+          "checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 125,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 198595,
+            "training_origin": null
+          },
+          "config": {
+            "path": "configs/protocol_aio3.yaml",
+            "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+          },
+          "embedded_checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 125,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 198595,
+            "training_origin": null
+          },
+          "epoch": 125,
+          "mtime_ns": 1784373590652626428,
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
+          "protocol": "aio3",
+          "release_state": "uploaded",
+          "release_tag": "best-aio3-stage-a-e0125-s0198595",
+          "run_contract": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "score": 34.18833113264535,
+          "selection": "top3",
+          "selection_index": {
+            "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+            "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+          },
+          "sha256": "f16dd4974363b2b73adf4ed9fc797d3c9143193c89458c546282e87592459a8d",
+          "size": 303986597,
+          "split_manifest": {
+            "path": "artifacts/manifests/locked_split_aio3.json",
+            "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+          },
+          "stage": "a",
+          "step": 198595
+        },
+        {
+          "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
+          "asset_name": "val_epoch155_step0233005.pt",
+          "checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 155,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 233005,
+            "training_origin": null
+          },
+          "config": {
+            "path": "configs/protocol_aio3.yaml",
+            "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+          },
+          "embedded_checkpoint_contract": {
+            "batch_in_epoch": 0,
+            "checkpoint_kind": "resumable_training_state",
+            "code_contract": null,
+            "completeness": {
+              "code": "legacy_missing",
+              "data": "legacy_missing",
+              "runtime": "present"
+            },
+            "config_path": "configs/protocol_aio3.yaml",
+            "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+            "data_contract": null,
+            "distributed_runtime": {
+              "accumulation": 1,
+              "backend": "nccl",
+              "global_effective_batch": 120,
+              "per_gpu_batch": 30,
+              "world_size": 4
+            },
+            "epoch": 155,
+            "feedback": "O7",
+            "model_state_present": true,
+            "optimizer_state_present": true,
+            "resumable_training_state": true,
+            "rng_state_present": true,
+            "run_contract_sha256": null,
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "runtime_contract": null,
+            "scheduler_state_present": true,
+            "schema_version": 1,
+            "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+            "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+            "stage": "a",
+            "step": 233005,
+            "training_origin": null
+          },
+          "epoch": 155,
+          "mtime_ns": 1784385963644530112,
+          "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
+          "protocol": "aio3",
+          "release_state": "planned",
+          "release_tag": "best-aio3-stage-a-e0155-s0233005",
+          "run_contract": null,
+          "run_name": "aio3_stage_a_coarse_seed1415926",
+          "score": 34.158262619896576,
+          "selection": "top3",
+          "selection_index": {
+            "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+            "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+          },
+          "sha256": "76055318c0910accb01d12a6cf514177b4988e6b39dde34f4e299d1bd6792cdc",
+          "size": 303986597,
+          "split_manifest": {
+            "path": "artifacts/manifests/locked_split_aio3.json",
+            "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+          },
+          "stage": "a",
+          "step": 233005
+        }
+      ]
+    }
+  },
+  "schema_version": 2,
   "source_root": "/root/autodl-tmp/srsc_lite_v12",
   "split_manifest": {
     "path": "artifacts/manifests/locked_split_aio3.json",
@@ -151,12 +955,14 @@
       "asset_name": "val_epoch145_step0221535.pt",
       "checkpoint_contract": {
         "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
         "code_contract": null,
         "completeness": {
           "code": "legacy_missing",
           "data": "legacy_missing",
           "runtime": "present"
         },
+        "config_path": "configs/protocol_aio3.yaml",
         "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
         "data_contract": null,
         "distributed_runtime": {
@@ -167,27 +973,82 @@
           "world_size": 4
         },
         "epoch": 145,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
         "run_name": "aio3_stage_a_coarse_seed1415926",
         "runtime_contract": null,
+        "scheduler_state_present": true,
         "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+        "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+        "stage": "a",
+        "step": 221535,
+        "training_origin": null
+      },
+      "config": {
+        "path": "configs/protocol_aio3.yaml",
+        "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+      },
+      "embedded_checkpoint_contract": {
+        "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
+        "code_contract": null,
+        "completeness": {
+          "code": "legacy_missing",
+          "data": "legacy_missing",
+          "runtime": "present"
+        },
+        "config_path": "configs/protocol_aio3.yaml",
+        "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+        "data_contract": null,
+        "distributed_runtime": {
+          "accumulation": 1,
+          "backend": "nccl",
+          "global_effective_batch": 120,
+          "per_gpu_batch": 30,
+          "world_size": 4
+        },
+        "epoch": 145,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "runtime_contract": null,
+        "scheduler_state_present": true,
+        "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
         "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
         "stage": "a",
         "step": 221535,
         "training_origin": null
       },
       "epoch": 145,
-      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
       "mtime_ns": 1784381838022252591,
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
       "protocol": "aio3",
       "release_state": "uploaded",
       "release_tag": "best-aio3-stage-a-e0145-s0221535",
+      "run_contract": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",
       "score": 34.19738720161497,
       "selection": "top3",
+      "selection_index": {
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+        "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+      },
       "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
       "size": 303986597,
+      "split_manifest": {
+        "path": "artifacts/manifests/locked_split_aio3.json",
+        "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+      },
       "stage": "a",
       "step": 221535
     },
@@ -196,12 +1057,14 @@
       "asset_name": "val_epoch125_step0198595.pt",
       "checkpoint_contract": {
         "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
         "code_contract": null,
         "completeness": {
           "code": "legacy_missing",
           "data": "legacy_missing",
           "runtime": "present"
         },
+        "config_path": "configs/protocol_aio3.yaml",
         "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
         "data_contract": null,
         "distributed_runtime": {
@@ -212,41 +1075,36 @@
           "world_size": 4
         },
         "epoch": 125,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
         "run_name": "aio3_stage_a_coarse_seed1415926",
         "runtime_contract": null,
+        "scheduler_state_present": true,
         "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
         "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
         "stage": "a",
         "step": 198595,
         "training_origin": null
       },
-      "epoch": 125,
-      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
-      "mtime_ns": 1784373590652626428,
-      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
-      "protocol": "aio3",
-      "release_state": "uploaded",
-      "release_tag": "best-aio3-stage-a-e0125-s0198595",
-      "run_name": "aio3_stage_a_coarse_seed1415926",
-      "score": 34.18833113264535,
-      "selection": "top3",
-      "sha256": "f16dd4974363b2b73adf4ed9fc797d3c9143193c89458c546282e87592459a8d",
-      "size": 303986597,
-      "stage": "a",
-      "step": 198595
-    },
-    {
-      "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch115_step0187125.pt",
-      "asset_name": "val_epoch115_step0187125.pt",
-      "checkpoint_contract": {
+      "config": {
+        "path": "configs/protocol_aio3.yaml",
+        "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+      },
+      "embedded_checkpoint_contract": {
         "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
         "code_contract": null,
         "completeness": {
           "code": "legacy_missing",
           "data": "legacy_missing",
           "runtime": "present"
         },
+        "config_path": "configs/protocol_aio3.yaml",
         "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
         "data_contract": null,
         "distributed_runtime": {
@@ -256,30 +1114,147 @@
           "per_gpu_batch": 30,
           "world_size": 4
         },
-        "epoch": 115,
+        "epoch": 125,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
         "run_name": "aio3_stage_a_coarse_seed1415926",
         "runtime_contract": null,
+        "scheduler_state_present": true,
         "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
         "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
         "stage": "a",
-        "step": 187125,
+        "step": 198595,
         "training_origin": null
       },
-      "epoch": 115,
-      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
-      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
-      "mtime_ns": 1784369468737726916,
-      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch115_step0187125.pt",
+      "epoch": 125,
+      "mtime_ns": 1784373590652626428,
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
       "protocol": "aio3",
       "release_state": "uploaded",
-      "release_tag": "best-aio3-stage-a-e0115-s0187125",
+      "release_tag": "best-aio3-stage-a-e0125-s0198595",
+      "run_contract": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",
-      "score": 34.14464390127574,
+      "score": 34.18833113264535,
       "selection": "top3",
-      "sha256": "f1fa858c6eb6fb0a35778ef2de4a32367a4c74557f15404ef46cff7cc62030e7",
+      "selection_index": {
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+        "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+      },
+      "sha256": "f16dd4974363b2b73adf4ed9fc797d3c9143193c89458c546282e87592459a8d",
       "size": 303986597,
+      "split_manifest": {
+        "path": "artifacts/manifests/locked_split_aio3.json",
+        "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+      },
       "stage": "a",
-      "step": 187125
+      "step": 198595
+    },
+    {
+      "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
+      "asset_name": "val_epoch155_step0233005.pt",
+      "checkpoint_contract": {
+        "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
+        "code_contract": null,
+        "completeness": {
+          "code": "legacy_missing",
+          "data": "legacy_missing",
+          "runtime": "present"
+        },
+        "config_path": "configs/protocol_aio3.yaml",
+        "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+        "data_contract": null,
+        "distributed_runtime": {
+          "accumulation": 1,
+          "backend": "nccl",
+          "global_effective_batch": 120,
+          "per_gpu_batch": 30,
+          "world_size": 4
+        },
+        "epoch": 155,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "runtime_contract": null,
+        "scheduler_state_present": true,
+        "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+        "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+        "stage": "a",
+        "step": 233005,
+        "training_origin": null
+      },
+      "config": {
+        "path": "configs/protocol_aio3.yaml",
+        "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
+      },
+      "embedded_checkpoint_contract": {
+        "batch_in_epoch": 0,
+        "checkpoint_kind": "resumable_training_state",
+        "code_contract": null,
+        "completeness": {
+          "code": "legacy_missing",
+          "data": "legacy_missing",
+          "runtime": "present"
+        },
+        "config_path": "configs/protocol_aio3.yaml",
+        "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+        "data_contract": null,
+        "distributed_runtime": {
+          "accumulation": 1,
+          "backend": "nccl",
+          "global_effective_batch": 120,
+          "per_gpu_batch": 30,
+          "world_size": 4
+        },
+        "epoch": 155,
+        "feedback": "O7",
+        "model_state_present": true,
+        "optimizer_state_present": true,
+        "resumable_training_state": true,
+        "rng_state_present": true,
+        "run_contract_sha256": null,
+        "run_name": "aio3_stage_a_coarse_seed1415926",
+        "runtime_contract": null,
+        "scheduler_state_present": true,
+        "schema_version": 1,
+        "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
+        "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+        "stage": "a",
+        "step": 233005,
+        "training_origin": null
+      },
+      "epoch": 155,
+      "mtime_ns": 1784385963644530112,
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
+      "protocol": "aio3",
+      "release_state": "planned",
+      "release_tag": "best-aio3-stage-a-e0155-s0233005",
+      "run_contract": null,
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "score": 34.158262619896576,
+      "selection": "top3",
+      "selection_index": {
+        "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
+        "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
+      },
+      "sha256": "76055318c0910accb01d12a6cf514177b4988e6b39dde34f4e299d1bd6792cdc",
+      "size": 303986597,
+      "split_manifest": {
+        "path": "artifacts/manifests/locked_split_aio3.json",
+        "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
+      },
+      "stage": "a",
+      "step": 233005
     }
   ]
 }

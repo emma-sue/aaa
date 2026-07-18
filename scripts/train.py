@@ -47,6 +47,7 @@ from scripts.runtime_accounting import (
 )
 from scripts.stage_b_runtime import (
     assert_no_runtime_worker_override,
+    assert_stage_b_cublas_environment,
     runtime_identity_for_config,
 )
 
@@ -199,6 +200,21 @@ def ensure_run_contract(run_dir: Path, cfg: dict, args):
         ROOT / "src/losses/objectives.py",
     )
     runtime_identity = runtime_identity_for_config(Path(args.config), cfg)
+    if runtime_identity.get("stage_b_runtime_role") == "main":
+        runtime_manifest = json.loads(
+            Path(runtime_identity["stage_b_runtime_manifest_path"]).read_text()
+        )
+        bound_stage_a = runtime_manifest.get("bindings", {}).get(
+            "stage_a_checkpoint", {}
+        )
+        if (
+            args.source_init_path != bound_stage_a.get("path")
+            or args.source_init_sha256 != bound_stage_a.get("sha256")
+        ):
+            raise RuntimeError(
+                "main Stage-B source checkpoint differs from the frozen "
+                "runtime preflight binding"
+            )
     contract = {
         "schema": 1,
         "run_name": args.run_name,
@@ -733,6 +749,53 @@ def save_checkpoint(
 ):
     tmp = path.with_suffix(path.suffix + ".tmp")
     accounting = runtime_snapshot()
+    run_contract_path = path.parent / "run_contract.json"
+    if not run_contract_path.is_file():
+        raise RuntimeError(
+            f"refusing checkpoint without immutable run contract: {run_contract_path}"
+        )
+    run_contract_sha256 = sha256_file(run_contract_path)
+    if getattr(args, "run_contract_sha256", None) != run_contract_sha256:
+        raise RuntimeError("checkpoint/run-contract SHA256 carrier mismatch")
+    run_contract = json.loads(run_contract_path.read_text())
+    config_sha256 = hashlib.sha256(Path(args.config).read_bytes()).hexdigest()
+    split_manifest_sha256 = hashlib.sha256(
+        Path(cfg["split_manifest"]).read_bytes()
+    ).hexdigest()
+    code_contract = run_contract.get("code_sha256")
+    if not isinstance(code_contract, dict) or not code_contract:
+        raise RuntimeError("run contract has no checkpoint-bindable code closure")
+    data_contract = {
+        "config_path": str(Path(args.config).resolve()),
+        "config_sha256": config_sha256,
+        "split_manifest_path": str(Path(cfg["split_manifest"]).resolve()),
+        "split_manifest_sha256": split_manifest_sha256,
+        "coordinate_stats_path": (
+            str(Path(cfg["coordinate_stats"]).resolve())
+            if cfg.get("coordinate_stats") else None
+        ),
+        "coordinate_stats_sha256": run_contract.get(
+            "coordinate_stats_sha256"
+        ),
+        "source_init_path": run_contract.get("source_init_path"),
+        "source_init_sha256": run_contract.get("source_init_sha256"),
+    }
+    runtime_contract = {
+        "run_contract_path": str(run_contract_path.resolve()),
+        "run_contract_sha256": run_contract_sha256,
+        "deterministic_algorithms": run_contract.get(
+            "deterministic_algorithms"
+        ),
+        "cublas_workspace_config": run_contract.get(
+            "cublas_workspace_config"
+        ),
+        "stage_b_runtime_manifest_path": run_contract.get(
+            "stage_b_runtime_manifest_path"
+        ),
+        "stage_b_runtime_manifest_sha256": run_contract.get(
+            "stage_b_runtime_manifest_sha256"
+        ),
+    }
     torch.save(
         {
             "model": model.state_dict(),
@@ -743,10 +806,13 @@ def save_checkpoint(
             "step": step,
             "validation_pending": validation_pending,
             "config": cfg,
-            "config_sha256": hashlib.sha256(Path(args.config).read_bytes()).hexdigest(),
-            "split_manifest_sha256": hashlib.sha256(Path(cfg["split_manifest"]).read_bytes()).hexdigest(),
+            "config_sha256": config_sha256,
+            "split_manifest_sha256": split_manifest_sha256,
             "args": vars(args),
             "runtime_accounting": accounting,
+            "runtime_contract": runtime_contract,
+            "data_contract": data_contract,
+            "code_contract": code_contract,
             "rng": {
                 "torch": torch.get_rng_state(),
                 "cuda": torch.cuda.get_rng_state_all(),
@@ -1052,6 +1118,7 @@ def main():
             "workers-override is forbidden for a frozen Stage-B runtime; "
             "the generated config owns the worker count"
         )
+    assert_stage_b_cublas_environment(runtime_identity)
     seed_all(cfg["seed"])
     torch.set_float32_matmul_precision("high")
     # Stage-B mechanism thresholds are as small as 0.02 dB.  Runtime kernel

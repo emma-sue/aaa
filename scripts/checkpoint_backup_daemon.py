@@ -115,6 +115,18 @@ def bind_checkpoint_index_to_commit(mirror: Path, snapshot_commit: str) -> None:
     binding = {"commit": snapshot_commit, "tree": tree}
     index["git_snapshot"] = binding
     rows: list[dict[str, object]] = []
+    for run_record in (index.get("runs") or {}).values():
+        if not isinstance(run_record, dict):
+            continue
+        rows.extend(row for row in run_record.get("top3", []) if isinstance(row, dict))
+        for key in (
+            "current_best", "formal_best", "pilot_model", "resume_latest",
+            "resume_uploaded", "resume_local_latest",
+        ):
+            row = run_record.get(key)
+            if isinstance(row, dict):
+                rows.append(row)
+    # Keep schema-v1 and AIO-3 compatibility aliases bound as well.
     rows.extend(row for row in index.get("top3", []) if isinstance(row, dict))
     for key in (
         "current_best", "resume_latest", "resume_uploaded", "resume_local_latest",
@@ -196,6 +208,21 @@ def release_assets(repo: str, tag: str) -> dict[str, dict[str, object]]:
     return {str(asset["name"]): asset for asset in payload.get("assets", [])}
 
 
+def set_release_latest(repo: str, tag: str, make_latest: bool) -> None:
+    """Set Latest explicitly; backfills and rolling assets must never steal it."""
+    payload = json.loads(run_network(
+        ["gh", "api", f"repos/{repo}/releases/tags/{tag}"], capture=True,
+    ).stdout)
+    release_id = payload.get("id")
+    if not isinstance(release_id, int):
+        raise RuntimeError(f"Release has no numeric id: {tag}")
+    run_network([
+        "gh", "api", "--method", "PATCH",
+        f"repos/{repo}/releases/{release_id}",
+        "--raw-field", f"make_latest={'true' if make_latest else 'false'}",
+    ], capture=True)
+
+
 def asset_matches(row: dict[str, object] | None, digest: str, size: int) -> bool:
     return bool(
         row
@@ -220,7 +247,9 @@ def verify_remote_release_assets(
         raise RuntimeError(f"Release assets incomplete or digest-mismatched: {tag}/{mismatches}")
 
 
-def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
+def publish_release(
+    repo: str, row: dict[str, object], immutable: bool, *, make_latest: bool = False,
+) -> None:
     source = Path(str(row["absolute_source_path"]))
     expected = str(row["sha256"])
     tag = str(row["release_tag"])
@@ -246,6 +275,7 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
                 asset_matches(existing.get(name), digest, size)
                 for name, (digest, size) in expected_assets.items()
             ):
+                set_release_latest(repo, tag, make_latest)
                 return
             if main:
                 run_network([
@@ -253,6 +283,7 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
                     "--repo", repo, "--clobber",
                 ], capture=True)
                 verify_remote_release_assets(repo, tag, expected_assets)
+                set_release_latest(repo, tag, make_latest)
                 return
         asset = stage_asset(source, temp_path)
         actual = sha256(asset)
@@ -264,11 +295,13 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
                 "gh", "release", "create", tag, "--repo", repo, "--target", target,
                 "--title", tag, "--notes", "SRSC checkpoint with SHA256-bound recovery metadata.",
             ])
+            set_release_latest(repo, tag, make_latest)
         run_network([
             "gh", "release", "upload", tag, str(asset), str(sidecar), str(metadata),
             "--repo", repo, "--clobber",
         ], capture=True)
         verify_remote_release_assets(repo, tag, expected_assets)
+        set_release_latest(repo, tag, make_latest)
 
 
 def load_state(path: Path) -> dict[str, object]:
@@ -279,6 +312,99 @@ def save_state(path: Path, state: dict[str, object]) -> None:
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
     temp.replace(path)
+
+
+def indexed_runs(index: dict[str, object]) -> dict[str, dict[str, object]]:
+    runs = index.get("runs")
+    if isinstance(runs, dict):
+        return {str(name): row for name, row in runs.items() if isinstance(row, dict)}
+    # Read-only compatibility for a schema-v1 mirror during a rolling upgrade.
+    return {
+        "aio3_stage_a_coarse_seed1415926": {
+            "run_name": "aio3_stage_a_coarse_seed1415926",
+            "protocol": "aio3", "stage": "a", "category": "stage_a",
+            "publish_large_assets": True,
+            "top3": index.get("top3", []),
+            "current_best": index.get("current_best"),
+            "formal_best": None, "pilot_model": None,
+            "resume_latest": index.get("resume_latest"),
+            "resume_uploaded": index.get("resume_uploaded"),
+            "resume_local_latest": index.get("resume_local_latest"),
+        }
+    }
+
+
+def mutable_run_state(
+    state: dict[str, object], run_name: str,
+) -> dict[str, object]:
+    runs = state.setdefault("runs", {})
+    if not isinstance(runs, dict):
+        raise RuntimeError("Backup state has malformed per-run mapping")
+    current = runs.setdefault(run_name, {})
+    if not isinstance(current, dict):
+        raise RuntimeError(f"Backup state is malformed for run: {run_name}")
+    if run_name == "aio3_stage_a_coarse_seed1415926":
+        for key in (
+            "best_sha256", "best_sha256s", "best_uploaded_utc",
+            "resume_sha256", "resume_upload_unix", "resume_uploaded_utc",
+        ):
+            if key in state and key not in current:
+                current[key] = state[key]
+    return current
+
+
+def immutable_bucket(row: dict[str, object]) -> str:
+    return (
+        "formal_sha256s"
+        if row.get("selection") == "formal-best-model" else "best_sha256s"
+    )
+
+
+def immutable_uploaded(run_state: dict[str, object], row: dict[str, object]) -> bool:
+    values = set(run_state.get(immutable_bucket(row), []))
+    if immutable_bucket(row) == "best_sha256s" and run_state.get("best_sha256"):
+        values.add(str(run_state["best_sha256"]))
+    return row.get("sha256") in values
+
+
+def mark_immutable_uploaded(
+    run_state: dict[str, object], row: dict[str, object], state_path: Path,
+    state: dict[str, object],
+) -> None:
+    key = immutable_bucket(row)
+    values = set(run_state.get(key, []))
+    values.add(str(row["sha256"]))
+    run_state[key] = sorted(values)
+    if key == "best_sha256s":
+        run_state["best_sha256"] = row["sha256"]
+        run_state["best_uploaded_utc"] = utc()
+    else:
+        run_state["formal_uploaded_utc"] = utc()
+    save_state(state_path, state)
+
+
+def latest_scientific_head(
+    index: dict[str, object], state: dict[str, object],
+) -> dict[str, object] | None:
+    candidates: list[dict[str, object]] = []
+    for run_name, run_record in indexed_runs(index).items():
+        if not run_record.get("publish_large_assets", True):
+            continue
+        row = run_record.get("formal_best") or run_record.get("current_best")
+        if not isinstance(row, dict) or not row.get("release_tag"):
+            continue
+        run_state = mutable_run_state(state, run_name)
+        if immutable_uploaded(run_state, row):
+            candidates.append(row)
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda row: (
+            int(row.get("mtime_ns", 0)), int(row.get("step", -1)),
+            str(row.get("release_tag")),
+        ),
+    )
 
 
 def iteration(args: argparse.Namespace) -> None:
@@ -302,42 +428,79 @@ def iteration(args: argparse.Namespace) -> None:
     state_path = args.mirror / ".local_backup_state.json"
     state = load_state(state_path)
     uploaded = False
-    uploaded_best = set(state.get("best_sha256s", []))
-    if state.get("best_sha256"):
-        uploaded_best.add(str(state["best_sha256"]))
-    # Protect the current top-1 first.
-    current_best = index.get("current_best")
-    if current_best and current_best.get("sha256") not in uploaded_best:
-        publish_release(args.repo, current_best, immutable=True)
-        uploaded_best.add(str(current_best["sha256"]))
-        state["best_sha256"] = current_best["sha256"]
-        state["best_sha256s"] = sorted(uploaded_best)
-        state["best_uploaded_utc"] = utc()
-        save_state(state_path, state)
-        uploaded = True
-    resume = index.get("resume_local_latest") or index.get("resume_latest")
-    due = time.time() - float(state.get("resume_upload_unix", 0)) >= args.resume_interval_hours * 3600
-    if resume and due and state.get("resume_sha256") != resume.get("sha256"):
-        publish_release(args.repo, resume, immutable=False)
-        state["resume_sha256"] = resume["sha256"]
-        state["resume_upload_unix"] = time.time()
-        state["resume_uploaded_utc"] = utc()
-        save_state(state_path, state)
-        uploaded = True
-    # Once current best and rolling resume state are protected, archive the
-    # bounded retained top-3 backlog. This recovers surviving historical bests
-    # without delaying the checkpoint needed for exact continuation.
-    for best in index.get("top3", []):
-        if best.get("sha256") in uploaded_best:
-            publish_release(args.repo, best, immutable=True)
+    for run_name, run_record in sorted(indexed_runs(index).items()):
+        # Pilot checkpoints are intentionally index-only. They are plumbing
+        # diagnostics, not scientific assets, and must not grow Releases.
+        if not run_record.get("publish_large_assets", True):
             continue
-        publish_release(args.repo, best, immutable=True)
-        uploaded_best.add(str(best["sha256"]))
-        state["best_sha256"] = best["sha256"]
-        state["best_sha256s"] = sorted(uploaded_best)
-        state["best_uploaded_utc"] = utc()
-        save_state(state_path, state)
-        uploaded = True
+        run_state = mutable_run_state(state, run_name)
+        head = run_record.get("formal_best") or run_record.get("current_best")
+        if int(run_state.get("metadata_schema_version", 0)) < 2:
+            reconciled: set[str] = set()
+            rows = [head, run_record.get("formal_best"), *run_record.get("top3", [])]
+            for row in rows:
+                if (
+                    not isinstance(row, dict)
+                    or str(row.get("sha256")) in reconciled
+                    or not immutable_uploaded(run_state, row)
+                ):
+                    continue
+                publish_release(args.repo, row, immutable=True, make_latest=False)
+                reconciled.add(str(row["sha256"]))
+            run_state["metadata_schema_version"] = 2
+            run_state["metadata_reconciled_utc"] = utc()
+            save_state(state_path, state)
+        if isinstance(head, dict) and not immutable_uploaded(run_state, head):
+            publish_release(args.repo, head, immutable=True, make_latest=False)
+            mark_immutable_uploaded(run_state, head, state_path, state)
+            uploaded = True
+
+        resume = run_record.get("resume_local_latest") or run_record.get("resume_latest")
+        due = (
+            time.time() - float(run_state.get("resume_upload_unix", 0))
+            >= args.resume_interval_hours * 3600
+        )
+        resumable = bool(
+            isinstance(resume, dict)
+            and (resume.get("checkpoint_contract") or {}).get("resumable_training_state")
+        )
+        if (
+            resumable and due
+            and run_state.get("resume_sha256") != resume.get("sha256")
+        ):
+            publish_release(args.repo, resume, immutable=False, make_latest=False)
+            run_state["resume_sha256"] = resume["sha256"]
+            run_state["resume_upload_unix"] = time.time()
+            run_state["resume_uploaded_utc"] = utc()
+            save_state(state_path, state)
+            uploaded = True
+
+        # Archive retained top-3 only after the current head and rolling state.
+        for best in run_record.get("top3", []):
+            if not isinstance(best, dict) or immutable_uploaded(run_state, best):
+                continue
+            publish_release(args.repo, best, immutable=True, make_latest=False)
+            mark_immutable_uploaded(run_state, best, state_path, state)
+            uploaded = True
+
+        formal = run_record.get("formal_best")
+        if (
+            isinstance(formal, dict) and formal is not head
+            and not immutable_uploaded(run_state, formal)
+        ):
+            publish_release(args.repo, formal, immutable=True, make_latest=False)
+            mark_immutable_uploaded(run_state, formal, state_path, state)
+            uploaded = True
+
+    # GitHub has one repository-global Latest flag. Choose the most recently
+    # written current/formal scientific head; historical top-3 backfills and
+    # rolling resume assets are always created with make_latest=false.
+    latest = latest_scientific_head(index, state)
+    if latest is not None:
+        set_release_latest(args.repo, str(latest["release_tag"]), True)
+        state["latest_release_tag"] = latest["release_tag"]
+        state["latest_release_sha256"] = latest["sha256"]
+        state["latest_release_checked_utc"] = utc()
     save_state(state_path, state)
     if uploaded:
         # Only after successful asset publication do we mark the Git index as

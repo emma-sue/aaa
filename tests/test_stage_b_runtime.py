@@ -47,9 +47,10 @@ def _write_templates(root: Path, protocol: str) -> tuple[Path, Path, Path]:
         (configs / "stage_b_aio3_10_10.yaml").write_text(
             yaml.safe_dump(capacity, sort_keys=False)
         )
-    worker = root / "scripts/preflight_stage_b_runtime.py"
-    worker.parent.mkdir(parents=True)
-    worker.write_text("# immutable mock worker\n")
+    for relative in runtime.PREFLIGHT_CODE_RELATIVE_PATHS:
+        code = root / relative
+        code.parent.mkdir(parents=True, exist_ok=True)
+        code.write_text(f"# immutable mock code: {relative}\n")
     return stage_a, stats, split
 
 
@@ -91,6 +92,8 @@ def _worker_payload(protocol: str, selected_index: int = 1) -> dict:
         "scientific_authority": "NONE",
         "official_test_accessed": False,
         "quality_metrics_computed": False,
+        "input_bindings": {"mock": True},
+        "inputs_unchanged_through_preflight": True,
         "attempts": attempts,
         "hardware": {"name": "mock-gpu"},
     }
@@ -101,7 +104,19 @@ def _runner_for(root: Path, payload: dict, calls: list[list[str]]):
         calls.append(command)
         output = Path(command[command.index("--output") + 1])
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(payload, indent=2) + "\n")
+        protocol = command[command.index("--protocol") + 1]
+        stage_a = Path(command[command.index("--stage-a-checkpoint") + 1])
+        main_template = Path(command[command.index("--main-template") + 1])
+        main_cfg = yaml.safe_load(main_template.read_text())
+        effective_payload = json.loads(json.dumps(payload))
+        effective_payload["input_bindings"] = runtime.preflight_input_bindings(
+            root,
+            protocol,
+            stage_a_checkpoint=stage_a,
+            coordinate_stats=Path(main_cfg["coordinate_stats"]),
+        )
+        effective_payload["inputs_unchanged_through_preflight"] = True
+        output.write_text(json.dumps(effective_payload, indent=2) + "\n")
 
     return runner
 
@@ -228,6 +243,41 @@ def test_frozen_bundle_drift_fails_without_reselection(tmp_path: Path):
         )
 
 
+def test_preflight_binding_rejects_stats_argument_not_used_by_template(tmp_path: Path):
+    stage_a, _stats, _split = _write_templates(tmp_path, "aio5")
+    other = tmp_path / "other_stats.json"
+    other.write_text("{}\n")
+    with pytest.raises(RuntimeError, match="does not match the main template"):
+        runtime.preflight_input_bindings(
+            tmp_path,
+            "aio5",
+            stage_a_checkpoint=stage_a,
+            coordinate_stats=other,
+        )
+
+
+def test_template_drift_during_worker_cannot_be_frozen(tmp_path: Path):
+    stage_a, stats, _split = _write_templates(tmp_path, "aio5")
+
+    def drifting_runner(command: list[str], _log_name: str) -> None:
+        template = tmp_path / "configs/stage_b_aio5.yaml"
+        cfg = yaml.safe_load(template.read_text())
+        cfg["workers"] += 1
+        template.write_text(yaml.safe_dump(cfg, sort_keys=False))
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(_worker_payload("aio5", 0)) + "\n")
+
+    with pytest.raises(RuntimeError, match="inputs drifted"):
+        runtime.ensure_stage_b_runtime_bundle(
+            tmp_path,
+            "aio5",
+            stage_a_checkpoint=stage_a,
+            coordinate_stats=stats,
+            runner=drifting_runner,
+        )
+
+
 def test_run_contract_identity_rejects_missing_worker_evidence(tmp_path: Path):
     stage_a, stats, _ = _write_templates(tmp_path, "aio5")
     bundle = runtime.ensure_stage_b_runtime_bundle(
@@ -325,6 +375,9 @@ def test_real_preflight_driver_output_matches_parent_schema(
         }
 
     monkeypatch.setattr(preflight, "_run_worker", fake_worker)
+    monkeypatch.setattr(
+        preflight, "_validate_worker_for_probe", lambda *_args, **_kwargs: "PASS"
+    )
     output = tmp_path / "driver-output.json"
     args = SimpleNamespace(
         root=str(tmp_path),
@@ -365,6 +418,10 @@ def test_real_preflight_driver_output_matches_parent_schema(
 def test_orchestrator_cache_identity_and_command_use_frozen_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    monkeypatch.setenv(
+        "CUBLAS_WORKSPACE_CONFIG",
+        runtime.REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG,
+    )
     stage_a, stats, _split = _write_templates(tmp_path, "aio3")
     calls: list[list[str]] = []
     bundle = runtime.ensure_stage_b_runtime_bundle(
@@ -390,6 +447,10 @@ def test_orchestrator_cache_identity_and_command_use_frozen_runtime(
     assert contract["stage_b_runtime_family"] == "aio3"
     assert contract["stage_b_runtime_role"] == "main"
     assert contract["workers_override"] is None
+    assert (
+        contract["cublas_workspace_config"]
+        == runtime.REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG
+    )
 
     monkeypatch.delenv("SRSC_TRAIN_WORKERS", raising=False)
     command = orchestrate.train_command(
@@ -410,4 +471,20 @@ def test_orchestrator_cache_identity_and_command_use_frozen_runtime(
             "O7",
             stage_a,
             max_steps=1000,
+        )
+    monkeypatch.delenv("SRSC_TRAIN_WORKERS")
+    monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":16:8")
+    with pytest.raises(RuntimeError, match="CUBLAS_WORKSPACE_CONFIG"):
+        orchestrate.train_command(
+            bundle.main_config,
+            "b_oracle",
+            "aio3_oracle_o7_pilot_n1000_s7",
+            "O7",
+            stage_a,
+            max_steps=1000,
+        )
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG")
+    with pytest.raises(RuntimeError, match="CUBLAS_WORKSPACE_CONFIG"):
+        runtime.assert_stage_b_cublas_environment(
+            runtime.runtime_identity_for_config(bundle.main_config)
         )

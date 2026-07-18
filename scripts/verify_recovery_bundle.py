@@ -72,8 +72,16 @@ def verify_manifest(root: Path) -> int:
 
 def payload_contract(payload: dict) -> dict[str, object]:
     args = payload.get("args") or {}
+    effective_config = payload.get("config") or {}
+    if not isinstance(args, dict) or not isinstance(effective_config, dict):
+        raise RuntimeError("Checkpoint args/config provenance is malformed")
     runtime = payload.get("runtime_contract")
     distributed = payload.get("distributed_runtime")
+    run_contract_sha256 = (
+        payload.get("run_contract_sha256")
+        or args.get("run_contract_sha256")
+        or (runtime or {}).get("run_contract_sha256")
+    )
     contract = {
         "schema_version": 1,
         "epoch": int(payload.get("epoch", -1)),
@@ -88,13 +96,100 @@ def payload_contract(payload: dict) -> dict[str, object]:
         "code_contract": payload.get("code_contract"),
         "run_name": args.get("run_name"),
         "stage": args.get("stage"),
+        "feedback": args.get("feedback"),
+        "config_path": args.get("config"),
+        "split_manifest_path": effective_config.get("split_manifest"),
+        "run_contract_sha256": run_contract_sha256,
+        "checkpoint_kind": payload.get("checkpoint_kind", "resumable_training_state"),
+        "model_state_present": "model" in payload,
+        "optimizer_state_present": "optimizer" in payload,
+        "scheduler_state_present": "scheduler" in payload,
+        "rng_state_present": "rng" in payload or "rng_by_rank" in payload,
     }
+    contract["resumable_training_state"] = all(
+        contract[key] for key in (
+            "model_state_present", "optimizer_state_present",
+            "scheduler_state_present", "rng_state_present",
+        )
+    )
     contract["completeness"] = {
         "runtime": "present" if runtime is not None or distributed is not None else "missing",
         "data": "present" if contract["data_contract"] is not None else "legacy_missing",
         "code": "present" if contract["code_contract"] is not None else "legacy_missing",
     }
     return contract
+
+
+def checkpoint_rows(index: dict) -> list[tuple[dict, dict]]:
+    rows: list[tuple[dict, dict]] = []
+    runs = index.get("runs")
+    if isinstance(runs, dict):
+        legacy = runs.get("aio3_stage_a_coarse_seed1415926")
+        if isinstance(legacy, dict):
+            for key in (
+                "current_best", "resume_uploaded", "resume_latest",
+                "resume_local_latest",
+            ):
+                alias = index.get(key)
+                canonical = legacy.get(key)
+                if alias != canonical:
+                    raise RuntimeError(
+                        "Checkpoint payload contract differs between the AIO-3 "
+                        f"compatibility alias and canonical run row: {key}"
+                    )
+            if index.get("top3") != legacy.get("top3"):
+                raise RuntimeError(
+                    "Checkpoint payload contract differs between the AIO-3 "
+                    "compatibility alias and canonical run row: top3"
+                )
+        for run in runs.values():
+            if not isinstance(run, dict):
+                continue
+            for row in run.get("top3", []):
+                if isinstance(row, dict):
+                    rows.append((row, run))
+            for key in (
+                "current_best", "formal_best", "pilot_model", "resume_uploaded",
+                "resume_latest", "resume_local_latest",
+            ):
+                row = run.get(key)
+                if isinstance(row, dict):
+                    rows.append((row, run))
+    else:
+        for row in index.get("top3", []):
+            if isinstance(row, dict):
+                rows.append((row, index))
+        for key in ("current_best", "resume_uploaded", "resume_latest", "resume_local_latest"):
+            row = index.get(key)
+            if isinstance(row, dict):
+                rows.append((row, index))
+    unique: list[tuple[dict, dict]] = []
+    seen: set[tuple[object, ...]] = set()
+    for row, run in rows:
+        identity = (
+            row.get("sha256"), row.get("release_tag"), row.get("asset_name"),
+            row.get("selection"), row.get("git_snapshot_commit"),
+        )
+        if identity not in seen:
+            seen.add(identity)
+            unique.append((row, run))
+    return unique
+
+
+def verify_git_file(root: Path, commit: str, metadata: dict, label: str) -> None:
+    relative = metadata.get("path")
+    expected = metadata.get("sha256")
+    if not isinstance(relative, str) or not isinstance(expected, str):
+        raise RuntimeError(f"Recovery index has no safe {label} binding")
+    path = Path(relative)
+    if path.is_absolute() or ".." in path.parts:
+        raise RuntimeError(f"Unsafe {label} path in recovery index")
+    blob = subprocess.run(
+        ["git", "-C", str(root), "show", f"{commit}:{relative}"],
+        check=True, capture_output=True,
+    ).stdout
+    if sha256_bytes(blob) != expected:
+        raise RuntimeError(f"Checkpoint {label} does not match its Git snapshot")
 
 
 def verify_git_snapshot(root: Path, row: dict) -> None:
@@ -112,7 +207,6 @@ def verify_git_snapshot(root: Path, row: dict) -> None:
     ).stdout.strip()
     if actual_tree != expected_tree:
         raise RuntimeError("Checkpoint Git snapshot tree does not match its index binding")
-    index = json.loads((root / "recovery/CHECKPOINTS.json").read_text())
     contract = row.get("checkpoint_contract")
     if not isinstance(contract, dict):
         raise RuntimeError("Checkpoint Git binding has no payload contract")
@@ -120,7 +214,7 @@ def verify_git_snapshot(root: Path, row: dict) -> None:
         ("config", "config_sha256"),
         ("split_manifest", "split_manifest_sha256"),
     ):
-        metadata = index.get(index_key) or {}
+        metadata = row.get(index_key) or {}
         relative = metadata.get("path")
         expected = contract.get(contract_key)
         if not isinstance(relative, str) or not isinstance(expected, str):
@@ -131,6 +225,13 @@ def verify_git_snapshot(root: Path, row: dict) -> None:
         ).stdout
         if sha256_bytes(blob) != expected:
             raise RuntimeError(f"Checkpoint {index_key} does not match its Git snapshot")
+    for key in ("run_contract", "selection_index", "completion_marker"):
+        metadata = row.get(key)
+        if isinstance(metadata, dict):
+            verify_git_file(root, commit, metadata, key)
+    run_metadata = row.get("run_contract")
+    if isinstance(run_metadata, dict) and contract.get("run_contract_sha256") != run_metadata.get("sha256"):
+        raise RuntimeError("Checkpoint/run-contract Git binding mismatch")
     code_contract = contract.get("code_contract")
     if isinstance(code_contract, dict):
         for relative, expected in code_contract.items():
@@ -151,35 +252,44 @@ def verify_checkpoint(root: Path, checkpoint: Path) -> dict[str, object]:
     import torch
 
     index = json.loads((root / "recovery/CHECKPOINTS.json").read_text())
-    candidates = [*index.get("top3", [])]
-    for key in ("resume_uploaded", "resume_latest", "resume_local_latest"):
-        if index.get(key):
-            candidates.append(index[key])
+    candidates = checkpoint_rows(index)
     digest = sha256(checkpoint)
-    matches = [row for row in candidates if row.get("sha256") == digest]
+    matches = [(row, run) for row, run in candidates if row.get("sha256") == digest]
     if not matches:
         raise RuntimeError(f"Checkpoint SHA256 is absent from recovery index: {digest}")
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    required = {"model", "optimizer", "scheduler", "rng", "epoch", "step", "config_sha256"}
+    required = {"model", "epoch", "step", "config_sha256", "split_manifest_sha256"}
+    if any(
+        bool((row.get("checkpoint_contract") or {}).get("resumable_training_state"))
+        for row, _ in matches
+    ):
+        required.update({"optimizer", "scheduler"})
+        if "rng" not in payload and "rng_by_rank" not in payload:
+            raise RuntimeError("Checkpoint missing required resume RNG state")
     missing = sorted(required.difference(payload))
     if missing:
         raise RuntimeError(f"Checkpoint missing required resume state: {missing}")
     actual_contract = payload_contract(payload)
-    for row in matches:
+    for row, _run in matches:
         verify_git_snapshot(root, row)
-        if row.get("checkpoint_contract") != actual_contract:
+        expected_embedded = row.get("embedded_checkpoint_contract") or row.get("checkpoint_contract")
+        if expected_embedded != actual_contract:
             raise RuntimeError("Checkpoint payload contract differs from recovery index")
-    completeness = actual_contract["completeness"]
+    effective_contract = matches[0][0].get("checkpoint_contract") or actual_contract
+    completeness = effective_contract["completeness"]
     legacy_missing = any(
         completeness.get(field) == "legacy_missing" for field in ("code", "data")
     )
     return {
         "sha256": digest,
-        "git_snapshot_commit": matches[0].get("git_snapshot_commit"),
+        "git_snapshot_commit": matches[0][0].get("git_snapshot_commit"),
         "completeness": completeness,
         "provenance_status": (
-            "STATE_EXACT_LEGACY_CODE_DATA_UNPROVEN"
-            if legacy_missing else "FULL_CHECKPOINT_AND_GIT_CONTRACT_BOUND"
+            "STATE_EXACT_LEGACY_CODE_DATA_UNPROVEN" if legacy_missing else (
+                "FULL_CHECKPOINT_AND_GIT_CONTRACT_BOUND"
+                if actual_contract["resumable_training_state"]
+                else "MODEL_ONLY_CHECKPOINT_AND_GIT_CONTRACT_BOUND"
+            )
         ),
         "warning": (
             "Legacy checkpoint has no embedded code/data hashes; the bound Git snapshot "

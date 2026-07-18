@@ -25,6 +25,7 @@ import yaml
 
 MANIFEST_SCHEMA = "srsc.stage_b_runtime_bundle.v1"
 WORKER_RESULT_SCHEMA = "srsc.stage_b_memory_preflight.v1"
+REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG = ":4096:8"
 
 # The order is scientific state: the selector must take the first candidate
 # whose complete probe set passes.  Adding/reordering candidates creates a new
@@ -38,6 +39,32 @@ STAGE_B_RUNTIME_CANDIDATES: dict[str, tuple[tuple[int, int], ...]] = {
 }
 EXPECTED_EFFECTIVE_BATCH = {"aio3": 64, "aio5": 120}
 RUNTIME_ROLES = {"aio3": ("main", "capacity_10_10"), "aio5": ("main",)}
+
+
+def assert_stage_b_cublas_environment(
+    runtime_identity: Mapping[str, object],
+) -> None:
+    """Bind every frozen Stage-B arm to one deterministic CUDA workspace."""
+    if (
+        runtime_identity
+        and os.environ.get("CUBLAS_WORKSPACE_CONFIG")
+        != REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG
+    ):
+        raise RuntimeError(
+            "frozen Stage-B runtime requires "
+            "CUBLAS_WORKSPACE_CONFIG="
+            f"{REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG!r}"
+        )
+PREFLIGHT_CODE_RELATIVE_PATHS = (
+    "scripts/preflight_stage_b_runtime.py",
+    "scripts/train.py",
+    "scripts/stage_b_runtime.py",
+    "src/net/feedback_controls.py",
+    "src/net/srsc_lite.py",
+    "src/net/srsc_coordinates.py",
+    "src/data/aio_dataset.py",
+    "src/losses/objectives.py",
+)
 
 
 def utc_now() -> str:
@@ -195,6 +222,116 @@ def _load_yaml(path: Path) -> dict:
     return payload
 
 
+def preflight_code_hashes(root: str | Path) -> dict[str, str]:
+    """Hash every implementation file executed by the memory probe."""
+    root = Path(root).resolve()
+    records: dict[str, str] = {}
+    for relative in PREFLIGHT_CODE_RELATIVE_PATHS:
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        records[relative] = sha256_file(path)
+    return records
+
+
+def preflight_input_bindings(
+    root: str | Path,
+    protocol: str,
+    *,
+    stage_a_checkpoint: str | Path,
+    coordinate_stats: str | Path,
+) -> dict[str, object]:
+    """Build the independently reproducible input identity for every probe.
+
+    The AIO-3 10/10 role intentionally has no scientific Stage-A checkpoint or
+    dedicated coordinate statistics at memory-preflight time.  It uses random
+    coarse weights and the main AIO-3 statistics strictly as a shape surrogate.
+    Its future statistics path is therefore bound through the capacity template
+    bytes, but the future file is allowed to appear after this bundle freezes.
+    """
+    root = Path(root).resolve()
+    templates = _template_paths(root, protocol)
+    stage_a_checkpoint = Path(stage_a_checkpoint).resolve()
+    coordinate_stats = Path(coordinate_stats).resolve()
+    for path in (stage_a_checkpoint, coordinate_stats, *templates.values()):
+        if not path.is_file():
+            raise FileNotFoundError(path)
+    main_cfg = _load_yaml(templates["main"])
+    if main_cfg.get("protocol") != protocol:
+        raise RuntimeError("Stage-B main template protocol mismatch")
+    template_stats = Path(str(main_cfg.get("coordinate_stats", ""))).resolve()
+    if template_stats != coordinate_stats:
+        raise RuntimeError(
+            "Stage-B coordinate-statistics argument does not match the main "
+            "template path"
+        )
+    split = Path(str(main_cfg.get("split_manifest", ""))).resolve()
+    if not split.is_file():
+        raise FileNotFoundError(split)
+
+    roles: dict[str, dict[str, object]] = {
+        "main": {
+            "template_path": str(templates["main"].resolve()),
+            "template_sha256": sha256_file(templates["main"]),
+            "stage_a_checkpoint": str(stage_a_checkpoint),
+            "stage_a_checkpoint_sha256": sha256_file(stage_a_checkpoint),
+            "init_policy": "COARSE_ONLY_FROM_SELECTED_STAGE_A",
+            "coordinate_stats_path": str(coordinate_stats),
+            "coordinate_stats_sha256": sha256_file(coordinate_stats),
+            "coordinate_stats_origin": "TEMPLATE_BOUND",
+        }
+    }
+    if protocol == "aio3":
+        capacity_path = templates["capacity_10_10"]
+        capacity_cfg = _load_yaml(capacity_path)
+        if capacity_cfg.get("protocol") != protocol:
+            raise RuntimeError("Stage-B capacity template protocol mismatch")
+        allowed_differences = {"model", "coordinate_stats"}
+        unexpected_differences = sorted(
+            key
+            for key in set(main_cfg) | set(capacity_cfg)
+            if key not in allowed_differences
+            and main_cfg.get(key) != capacity_cfg.get(key)
+        )
+        if unexpected_differences:
+            raise RuntimeError(
+                "AIO3 10/10 Stage-B template differs outside model/statistics: "
+                f"{unexpected_differences}"
+            )
+        declared_stats = Path(
+            str(capacity_cfg.get("coordinate_stats", ""))
+        ).resolve()
+        roles["capacity_10_10"] = {
+            "template_path": str(capacity_path.resolve()),
+            "template_sha256": sha256_file(capacity_path),
+            "stage_a_checkpoint": None,
+            "stage_a_checkpoint_sha256": None,
+            "init_policy": "MEMORY_ONLY_RANDOM_COARSE",
+            "coordinate_stats_path": str(coordinate_stats),
+            "coordinate_stats_sha256": sha256_file(coordinate_stats),
+            "coordinate_stats_origin": "MAIN_PROTOCOL_VALUES_MEMORY_SHAPE_ONLY",
+            "declared_future_coordinate_stats_path": str(declared_stats),
+        }
+
+    return {
+        "protocol": protocol,
+        "stage_a_checkpoint": {
+            "path": str(stage_a_checkpoint),
+            "sha256": sha256_file(stage_a_checkpoint),
+        },
+        "coordinate_stats": {
+            "path": str(coordinate_stats),
+            "sha256": sha256_file(coordinate_stats),
+        },
+        "split_manifest": {
+            "path": str(split),
+            "sha256": sha256_file(split),
+        },
+        "roles": roles,
+        "code_sha256": preflight_code_hashes(root),
+    }
+
+
 def _generated_config(
     template: Mapping[str, object],
     *,
@@ -236,7 +373,10 @@ def _exclusive_write(path: Path, content: str) -> None:
 
 
 def _validate_worker_result(
-    payload: Mapping[str, object], protocol: str,
+    payload: Mapping[str, object],
+    protocol: str,
+    *,
+    expected_bindings: Mapping[str, object] | None = None,
 ) -> tuple[tuple[int, int], Sequence[dict]]:
     candidates = [list(pair) for pair in _canonical_candidates(protocol)]
     if payload.get("schema") != WORKER_RESULT_SCHEMA:
@@ -255,6 +395,13 @@ def _validate_worker_result(
         )
     if payload.get("candidate_order") != candidates:
         raise RuntimeError("Stage-B memory preflight candidate order drift")
+    bindings = payload.get("input_bindings")
+    if not isinstance(bindings, dict):
+        raise RuntimeError("Stage-B memory preflight lacks immutable input bindings")
+    if payload.get("inputs_unchanged_through_preflight") is not True:
+        raise RuntimeError("Stage-B memory preflight inputs drifted during execution")
+    if expected_bindings is not None and bindings != dict(expected_bindings):
+        raise RuntimeError("Stage-B memory preflight input-binding mismatch")
     attempts = payload.get("attempts")
     if (
         not isinstance(attempts, list)
@@ -280,7 +427,7 @@ def _validate_worker_result(
             probe.get("probe_id"): probe
             for probe in probes if isinstance(probe, dict)
         }
-        if set(by_id) != expected_probes:
+        if len(probes) != len(expected_probes) or set(by_id) != expected_probes:
             raise RuntimeError(
                 "Stage-B memory preflight probe coverage mismatch: "
                 f"missing={sorted(expected_probes - set(by_id))} "
@@ -301,9 +448,9 @@ def _validate_worker_result(
         "accumulation": selected[1],
         "effective_batch": selected[0] * selected[1],
     }
-    if payload.get("selected") not in (None, expected_selected):
+    if payload.get("selected") != expected_selected:
         raise RuntimeError("worker selected runtime disagrees with first-all-pass policy")
-    if payload.get("selected_candidate") not in (None, list(selected)):
+    if payload.get("selected_candidate") != list(selected):
         raise RuntimeError("worker-selected candidate disagrees with first-all-pass policy")
     if payload.get("all_pass") is not True:
         raise RuntimeError("Stage-B memory preflight did not publish an all-pass result")
@@ -381,6 +528,14 @@ def validate_frozen_stage_b_runtime(
 
     stage_a_checkpoint = Path(stage_a_checkpoint).resolve()
     coordinate_stats = Path(coordinate_stats).resolve()
+    expected_preflight_bindings = preflight_input_bindings(
+        root,
+        protocol,
+        stage_a_checkpoint=stage_a_checkpoint,
+        coordinate_stats=coordinate_stats,
+    )
+    if payload.get("preflight_input_bindings") != expected_preflight_bindings:
+        raise RuntimeError("Stage-B runtime preflight input bindings drift")
     bindings = payload.get("bindings")
     if not isinstance(bindings, dict):
         raise RuntimeError("Stage-B runtime manifest lacks bindings")
@@ -422,7 +577,11 @@ def validate_frozen_stage_b_runtime(
     if sha256_file(worker_path) != worker_record.get("sha256"):
         raise RuntimeError("Stage-B runtime worker-result SHA256 drift")
     worker_payload = json.loads(worker_path.read_text())
-    worker_selected, _ = _validate_worker_result(worker_payload, protocol)
+    worker_selected, _ = _validate_worker_result(
+        worker_payload,
+        protocol,
+        expected_bindings=expected_preflight_bindings,
+    )
     if worker_selected != (micro_batch, accumulation):
         raise RuntimeError("Stage-B runtime selection differs from worker first-all-pass")
     worker_code = Path(str(worker_record.get("worker_code_path", ""))).resolve()
@@ -537,6 +696,12 @@ def ensure_stage_b_runtime_bundle(
     for path in (stage_a_checkpoint, coordinate_stats, *templates.values()):
         if not path.is_file():
             raise FileNotFoundError(path)
+    bindings_before = preflight_input_bindings(
+        root,
+        protocol,
+        stage_a_checkpoint=stage_a_checkpoint,
+        coordinate_stats=coordinate_stats,
+    )
 
     worker_output = paths["worker_result"]
     worker_output.parent.mkdir(parents=True, exist_ok=True)
@@ -555,9 +720,21 @@ def ensure_stage_b_runtime_bundle(
     runner(command, f"{protocol}_stage_b_runtime_preflight.log")
     if not worker_output.is_file():
         raise RuntimeError("Stage-B memory preflight did not atomically publish output")
+    bindings_after = preflight_input_bindings(
+        root,
+        protocol,
+        stage_a_checkpoint=stage_a_checkpoint,
+        coordinate_stats=coordinate_stats,
+    )
+    if bindings_after != bindings_before:
+        raise RuntimeError(
+            "Stage-B memory-preflight inputs drifted while the probe was running"
+        )
     worker_payload = json.loads(worker_output.read_text())
     (micro_batch, accumulation), attempts = _validate_worker_result(
-        worker_payload, protocol
+        worker_payload,
+        protocol,
+        expected_bindings=bindings_after,
     )
     workers_by_role = {
         int(_load_yaml(path).get("workers", -1)) for path in templates.values()
@@ -627,6 +804,7 @@ def ensure_stage_b_runtime_bundle(
                 "worker_code_path": str(worker.resolve()),
                 "worker_code_sha256": sha256_file(worker),
             },
+            "preflight_input_bindings": bindings_after,
             "configs": config_records,
             "attempts": attempts,
             "capacity_preflight_scope": (
@@ -722,6 +900,54 @@ def runtime_identity_for_config(
     for key in ("micro_batch", "accumulation", "effective_batch", "workers"):
         if cfg.get(key) != selected.get(key):
             raise RuntimeError(f"Stage-B runtime config field drift: {key}")
+    worker_record = manifest.get("worker_result")
+    if not isinstance(worker_record, dict):
+        raise RuntimeError("Stage-B runtime manifest lacks worker-result binding")
+    worker_path = Path(str(worker_record.get("path", ""))).resolve()
+    if (
+        not worker_path.is_file()
+        or sha256_file(worker_path) != worker_record.get("sha256")
+    ):
+        raise RuntimeError("Stage-B runtime worker-result binding drift")
+    worker_code = Path(str(worker_record.get("worker_code_path", ""))).resolve()
+    if (
+        not worker_code.is_file()
+        or sha256_file(worker_code) != worker_record.get("worker_code_sha256")
+    ):
+        raise RuntimeError("Stage-B runtime worker-code binding drift")
+    worker_selected, _attempts = _validate_worker_result(
+        json.loads(worker_path.read_text()), str(family)
+    )
+    if worker_selected != (
+        int(selected.get("micro_batch", -1)),
+        int(selected.get("accumulation", -1)),
+    ):
+        raise RuntimeError("Stage-B runtime worker/manifest selection drift")
+    template_path = Path(str(record.get("template_path", ""))).resolve()
+    _validate_generated_role(
+        role=str(role),
+        record=record,
+        config_path=config_path,
+        template_path=template_path,
+        manifest_path=manifest_path,
+        protocol=str(family),
+        micro_batch=int(selected.get("micro_batch", -1)),
+        accumulation=int(selected.get("accumulation", -1)),
+        workers=int(selected.get("workers", -1)),
+    )
+    bindings = manifest.get("bindings")
+    if not isinstance(bindings, dict):
+        raise RuntimeError("Stage-B runtime manifest lacks prerequisite bindings")
+    for name in ("stage_a_checkpoint", "coordinate_stats", "split_manifest"):
+        binding = bindings.get(name)
+        if not isinstance(binding, dict):
+            raise RuntimeError(f"Stage-B runtime manifest lacks {name} binding")
+        bound_path = Path(str(binding.get("path", ""))).resolve()
+        if (
+            not bound_path.is_file()
+            or sha256_file(bound_path) != binding.get("sha256")
+        ):
+            raise RuntimeError(f"Stage-B runtime prerequisite drift: {name}")
     return {
         "stage_b_runtime_family": family,
         "stage_b_runtime_role": role,

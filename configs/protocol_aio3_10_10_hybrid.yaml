@@ -1,0 +1,62 @@
+protocol: aio3
+seed: 1415926
+data_root: /root/autodl-tmp/srsc_lite_v12/data
+list_root: /root/autodl-tmp/srsc_lite_v12/upstream/PromptIR/data_dir
+split_manifest: /root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json
+train_split: train
+coordinate_stats: /root/autodl-tmp/srsc_lite_v12/artifacts/stats/coordinate_stats_aio3_10_10.json
+crop_size: 128
+workers: 32
+epochs: 240
+warmup_epochs: 15
+warmup_start_lr: 0.0000001
+scheduler_max_epochs: 270
+lr: 0.0002
+min_lr: 0.00000001
+pretrain_eta_min: 0.0
+optimizer: adam
+weight_decay: 0.0
+gradient_clip: 0.01
+precision: bf16
+save_every_steps: 1000
+validate_every_epochs: 5
+official_test_locked: true
+
+# Exact optimization/sample schedule of the primary AIO-3 Stage-A trajectory.
+# Epochs are zero-based and end_epoch is exclusive.  The four-rank execution
+# uses safe micro-batches while retaining these canonical global updates.
+hybrid_schedule:
+  schema: 1
+  index_algorithm: exact_aio3_main_v1
+  dataset_size: 137669
+  expected_total_steps: 330500
+  expected_total_samples: 33034920
+  phases:
+    - start_epoch: 0
+      end_epoch: 55
+      micro_batch: 16
+      accumulation: 4
+      effective_batch: 64
+      steps_per_epoch: 2151
+      samples_per_epoch: 137664
+      sampler: legacy_single_gpu_random_sampler
+    - start_epoch: 55
+      end_epoch: 240
+      micro_batch: 15
+      accumulation: 8
+      effective_batch: 120
+      steps_per_epoch: 1147
+      samples_per_epoch: 137640
+      sampler: reconstructed_four_rank_distributed_sampler
+
+# The only architectural change relative to the registered 6/14 model is
+# decoder-block ownership: D1 owns 10 blocks and D2 owns 10 blocks.
+model:
+  dim: 48
+  matched_dim: 52
+  encoder_blocks: [4, 6, 6, 8]
+  d1_blocks: [3, 3, 4]
+  d2_blocks: [3, 3, 3]
+  d2_refinement: 1
+  heads: [1, 2, 4, 8]
+  expansion: 2.66

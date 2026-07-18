@@ -42,6 +42,10 @@ from scripts.train import (  # noqa: E402
     seed_all,
     tiled_stage_prediction,
 )
+from scripts.stage_b_runtime import (  # noqa: E402
+    preflight_code_hashes,
+    preflight_input_bindings,
+)
 from src.data import build_locked_val  # noqa: E402
 from src.data.aio_dataset import locked_sample_name  # noqa: E402
 
@@ -380,7 +384,13 @@ def _cuda_memory_snapshot() -> dict:
         "free_bytes_after_probe": int(free_bytes),
         "total_bytes": int(total_bytes),
     }
-    payload["headroom_bytes"] = payload["total_bytes"] - payload["peak_reserved_bytes"]
+    # ``total - own peak`` is valid only on an otherwise idle device.  The
+    # allocator's live free-memory reading also accounts for foreign CUDA
+    # contexts, so the conservative minimum is the only safe freeze signal.
+    payload["headroom_bytes"] = min(
+        payload["total_bytes"] - payload["peak_reserved_bytes"],
+        payload["free_bytes_after_probe"],
+    )
     payload["required_headroom_bytes"] = MIN_HEADROOM_BYTES
     payload["headroom_pass"] = payload["headroom_bytes"] >= MIN_HEADROOM_BYTES
     return payload
@@ -415,8 +425,16 @@ def _static_worker_metadata(args) -> dict:
             "compute_capability": [properties.major, properties.minor],
         }
     return {
+        "schema": SCHEMA,
+        "protocol": args.protocol,
+        "stage": args.stage,
+        "feedback": args.feedback,
+        "micro_batch": int(args.micro_batch),
+        "accumulation": int(args.accumulation),
+        "effective_batch": int(args.micro_batch * args.accumulation),
         "gpu": gpu,
         "software": _software_versions(),
+        "code_sha256": preflight_code_hashes(ROOT),
         "config": str(config),
         "config_sha256": _sha256(config),
         "template_role": args.template_role,
@@ -436,8 +454,12 @@ def _static_worker_metadata(args) -> dict:
             if args.coordinate_stats_override
             else "TEMPLATE_BOUND"
         ),
+        "split_manifest_path": str(Path(cfg["split_manifest"]).resolve()),
+        "split_manifest_sha256": _sha256(cfg["split_manifest"]),
         "official_test_accessed": False,
         "quality_metrics_computed": False,
+        "checkpoint_written": False,
+        "run_contract_written": False,
     }
 
 
@@ -456,8 +478,22 @@ def _safe_static_worker_metadata(args) -> dict:
 def _probe_provenance(worker: dict) -> dict:
     metadata = worker.get("worker_metadata", {})
     return {
+        "schema": worker.get("schema", metadata.get("schema")),
+        "protocol": worker.get("protocol", metadata.get("protocol")),
+        "stage": worker.get("stage", metadata.get("stage")),
+        "feedback": worker.get("feedback", metadata.get("feedback")),
+        "micro_batch": worker.get("micro_batch", metadata.get("micro_batch")),
+        "accumulation": worker.get(
+            "accumulation", metadata.get("accumulation")
+        ),
+        "effective_batch": worker.get(
+            "effective_batch", metadata.get("effective_batch")
+        ),
         "gpu": worker.get("gpu", metadata.get("gpu")),
         "software": worker.get("software", metadata.get("software")),
+        "code_sha256": worker.get(
+            "code_sha256", metadata.get("code_sha256")
+        ),
         "config": worker.get("config", metadata.get("config")),
         "config_sha256": worker.get(
             "config_sha256", metadata.get("config_sha256")
@@ -484,6 +520,12 @@ def _probe_provenance(worker: dict) -> dict:
             "coordinate_stats_origin",
             metadata.get("coordinate_stats_origin"),
         ),
+        "split_manifest_path": worker.get(
+            "split_manifest_path", metadata.get("split_manifest_path")
+        ),
+        "split_manifest_sha256": worker.get(
+            "split_manifest_sha256", metadata.get("split_manifest_sha256")
+        ),
         "official_test_accessed": worker.get(
             "official_test_accessed",
             metadata.get("official_test_accessed", False),
@@ -492,7 +534,225 @@ def _probe_provenance(worker: dict) -> dict:
             "quality_metrics_computed",
             metadata.get("quality_metrics_computed", False),
         ),
+        "checkpoint_written": worker.get(
+            "checkpoint_written", metadata.get("checkpoint_written", False)
+        ),
+        "run_contract_written": worker.get(
+            "run_contract_written", metadata.get("run_contract_written", False)
+        ),
     }
+
+
+def _validate_memory_snapshot(snapshot: object, label: str) -> bool:
+    if not isinstance(snapshot, dict):
+        raise RuntimeError(f"{label} lacks a CUDA memory snapshot")
+    integer_keys = (
+        "peak_allocated_bytes",
+        "peak_reserved_bytes",
+        "free_bytes_after_probe",
+        "total_bytes",
+        "headroom_bytes",
+        "required_headroom_bytes",
+    )
+    try:
+        values = {key: int(snapshot[key]) for key in integer_keys}
+    except (KeyError, TypeError, ValueError) as error:
+        raise RuntimeError(f"{label} memory fields are incomplete") from error
+    if any(value < 0 for value in values.values()):
+        raise RuntimeError(f"{label} memory fields must be nonnegative")
+    if (
+        values["total_bytes"] <= 0
+        or values["peak_allocated_bytes"] > values["peak_reserved_bytes"]
+        or values["peak_reserved_bytes"] > values["total_bytes"]
+        or values["free_bytes_after_probe"] > values["total_bytes"]
+        or values["required_headroom_bytes"] != MIN_HEADROOM_BYTES
+    ):
+        raise RuntimeError(f"{label} memory snapshot is internally inconsistent")
+    expected_headroom = min(
+        values["total_bytes"] - values["peak_reserved_bytes"],
+        values["free_bytes_after_probe"],
+    )
+    expected_pass = expected_headroom >= MIN_HEADROOM_BYTES
+    if (
+        values["headroom_bytes"] != expected_headroom
+        or snapshot.get("headroom_pass") is not expected_pass
+    ):
+        raise RuntimeError(f"{label} headroom is not derived from real free memory")
+    return expected_pass
+
+
+def _validate_train_evidence(
+    evidence: object,
+    *,
+    stage: str,
+    accumulation: int,
+) -> bool:
+    if not isinstance(evidence, dict):
+        raise RuntimeError("training probe lacks complete evidence")
+    expected_micro_steps = 3 * accumulation
+    if (
+        evidence.get("optimizer_updates") != 3
+        or evidence.get("micro_steps") != expected_micro_steps
+        or evidence.get("expected_micro_steps") != expected_micro_steps
+        or evidence.get("finite_losses_gradients_predictions") is not True
+    ):
+        raise RuntimeError("training probe did not execute three exact updates")
+    routing = evidence.get("gradient_routing")
+    if not isinstance(routing, dict) or (
+        routing.get("frozen_encoder_d1_gradients") != 0
+        or int(routing.get("d2_gradient_parameter_count", 0)) <= 0
+        or (
+            stage == "b_predicted"
+            and int(routing.get("assessor_gradient_parameter_count", 0)) <= 0
+        )
+        or (
+            stage == "b_oracle"
+            and int(routing.get("assessor_gradient_parameter_count", -1)) != 0
+        )
+    ):
+        raise RuntimeError("training probe gradient-routing evidence is invalid")
+    adam = evidence.get("adam")
+    if not isinstance(adam, dict) or (
+        adam.get("optimizer") != "Adam"
+        or int(adam.get("state_parameter_count", 0)) <= 0
+        or int(adam.get("state_tensor_bytes", 0)) <= 0
+        or adam.get("all_observed_gradient_parameters_have_moments") is not True
+    ):
+        raise RuntimeError("training probe lacks materialized Adam moments")
+    return _validate_memory_snapshot(evidence.get("memory"), "train_step")
+
+
+def _validate_native_evidence(
+    evidence: object,
+    *,
+    height: int,
+    width: int,
+    adam_state_bytes: int,
+) -> bool:
+    if not isinstance(evidence, dict):
+        raise RuntimeError("native probe lacks complete evidence")
+    expected_shape = [1, 3, height, width]
+    if (
+        evidence.get("input_shape") != expected_shape
+        or evidence.get("output_shape") != expected_shape
+        or evidence.get("tile") != 0
+        or evidence.get("finite_prediction") is not True
+        or evidence.get("quality_metrics_computed") is not False
+        or int(evidence.get("adam_state_retained_bytes", -1)) != adam_state_bytes
+    ):
+        raise RuntimeError("native probe path/shape/Adam-retention evidence is invalid")
+    return _validate_memory_snapshot(evidence.get("memory"), "native_val")
+
+
+def _validate_worker_for_probe(
+    worker: dict,
+    *,
+    protocol: str,
+    role: str,
+    stage: str,
+    feedback: str,
+    micro_batch: int,
+    accumulation: int,
+    height: int,
+    width: int,
+    input_bindings: dict,
+) -> str:
+    """Validate one subprocess record and classify only allowed fallbacks."""
+    provenance = _probe_provenance(worker)
+    role_binding = input_bindings["roles"][role]
+    expected = {
+        "schema": SCHEMA,
+        "protocol": protocol,
+        "stage": stage,
+        "feedback": feedback,
+        "micro_batch": micro_batch,
+        "accumulation": accumulation,
+        "effective_batch": micro_batch * accumulation,
+        "config": role_binding["template_path"],
+        "config_sha256": role_binding["template_sha256"],
+        "stage_a_checkpoint": role_binding["stage_a_checkpoint"],
+        "stage_a_checkpoint_sha256": role_binding["stage_a_checkpoint_sha256"],
+        "coordinate_stats_path": role_binding["coordinate_stats_path"],
+        "coordinate_stats_sha256": role_binding["coordinate_stats_sha256"],
+        "coordinate_stats_origin": role_binding["coordinate_stats_origin"],
+        "split_manifest_path": input_bindings["split_manifest"]["path"],
+        "split_manifest_sha256": input_bindings["split_manifest"]["sha256"],
+        "code_sha256": input_bindings["code_sha256"],
+        "official_test_accessed": False,
+        "quality_metrics_computed": False,
+        "checkpoint_written": False,
+        "run_contract_written": False,
+    }
+    mismatched = sorted(
+        key for key, value in expected.items() if provenance.get(key) != value
+    )
+    if mismatched:
+        raise RuntimeError(f"worker provenance mismatch: {mismatched}")
+    if provenance.get("template_role") != role:
+        raise RuntimeError("worker template-role provenance mismatch")
+    expected_init_scopes = (
+        {"memory_only_random_coarse"}
+        if role_binding["init_policy"] == "MEMORY_ONLY_RANDOM_COARSE"
+        else {
+            "coarse_only_formal_expected",
+            "coarse_only_fresh_seeded_feedback_path",
+        }
+    )
+    if provenance.get("init_scope") not in expected_init_scopes:
+        raise RuntimeError("worker initialization-scope provenance mismatch")
+    gpu = provenance.get("gpu")
+    software = provenance.get("software")
+    if (
+        not isinstance(gpu, dict)
+        or not gpu.get("name")
+        or int(gpu.get("total_memory_bytes", 0)) <= 0
+        or not isinstance(software, dict)
+        or not software.get("torch")
+        or not software.get("cuda_runtime")
+    ):
+        raise RuntimeError("worker lacks GPU/software provenance")
+
+    status = worker.get("status")
+    if status not in {"PASS", "OOM", "HEADROOM_FAIL"}:
+        raise RuntimeError(f"non-memory worker failure: status={status!r}")
+    train = worker.get("train_step")
+    native = worker.get("native_val")
+    if status in {"PASS", "HEADROOM_FAIL"}:
+        train_pass = _validate_train_evidence(
+            train, stage=stage, accumulation=accumulation
+        )
+        adam_bytes = int(train["adam"]["state_tensor_bytes"])
+        native_pass = _validate_native_evidence(
+            native,
+            height=height,
+            width=width,
+            adam_state_bytes=adam_bytes,
+        )
+        if worker.get("optimizer_state_retained_for_native_val") is not True:
+            raise RuntimeError("worker did not retain Adam state for native probe")
+        if status == "PASS" and not (train_pass and native_pass):
+            raise RuntimeError("PASS worker contains a failed memory phase")
+        if status == "HEADROOM_FAIL" and train_pass and native_pass:
+            raise RuntimeError("HEADROOM_FAIL worker has no explicit headroom failure")
+    else:
+        failed_phase = worker.get("failed_phase")
+        if failed_phase not in {"train_step", "native_val"} or not worker.get("error"):
+            raise RuntimeError("OOM worker lacks explicit failed phase/error")
+        if failed_phase == "native_val":
+            _validate_train_evidence(
+                train, stage=stage, accumulation=accumulation
+            )
+        elif train is not None:
+            _validate_train_evidence(train, stage=stage, accumulation=accumulation)
+        if native is not None:
+            adam_bytes = int(train["adam"]["state_tensor_bytes"])
+            _validate_native_evidence(
+                native,
+                height=height,
+                width=width,
+                adam_state_bytes=adam_bytes,
+            )
+    return str(status)
 
 
 def execute_worker(args) -> dict:
@@ -641,6 +901,9 @@ def execute_worker(args) -> dict:
             "compute_capability": [properties.major, properties.minor],
         },
         "software": _software_versions(),
+        "code_sha256": preflight_code_hashes(ROOT),
+        "split_manifest_path": str(Path(cfg["split_manifest"]).resolve()),
+        "split_manifest_sha256": _sha256(cfg["split_manifest"]),
         "train_step": train_result,
         "native_val": native_result,
         "optimizer_state_retained_for_native_val": True,
@@ -858,10 +1121,33 @@ def execute_driver(args) -> tuple[dict, bool]:
     main = Path(args.main_template).resolve()
     main_cfg = yaml.safe_load(main.read_text())
     main_stats = Path(main_cfg["coordinate_stats"]).resolve()
+    input_bindings = preflight_input_bindings(
+        root,
+        args.protocol,
+        stage_a_checkpoint=Path(args.stage_a_checkpoint).resolve(),
+        coordinate_stats=main_stats,
+    )
+    if main != Path(input_bindings["roles"]["main"]["template_path"]):
+        raise ValueError("driver main-template path is not the registered template")
     templates = [
         ("main", main, Path(args.stage_a_checkpoint).resolve(), False, None)
     ]
     if args.capacity_template:
+        if args.capacity_stage_a_checkpoint:
+            raise ValueError(
+                "capacity preflight is structure-only and forbids a scientific "
+                "Stage-A checkpoint"
+            )
+        capacity_template = Path(args.capacity_template).resolve()
+        capacity_binding = input_bindings["roles"].get("capacity_10_10")
+        if (
+            not isinstance(capacity_binding, dict)
+            or capacity_template
+            != Path(capacity_binding["template_path"]).resolve()
+        ):
+            raise ValueError(
+                "driver capacity-template path is not the registered template"
+            )
         capacity_checkpoint = (
             Path(args.capacity_stage_a_checkpoint).resolve()
             if args.capacity_stage_a_checkpoint
@@ -870,7 +1156,7 @@ def execute_driver(args) -> tuple[dict, bool]:
         templates.append(
             (
                 "capacity_10_10",
-                Path(args.capacity_template).resolve(),
+                capacity_template,
                 capacity_checkpoint,
                 capacity_checkpoint is None,
                 main_stats if capacity_checkpoint is None else None,
@@ -929,18 +1215,30 @@ def execute_driver(args) -> tuple[dict, bool]:
                         height=height,
                         width=width,
                     )
-                    probes.extend(_probe_records(worker, role, stage, feedback))
-                    status = worker.get("status", "ERROR")
-                    if status not in {"PASS", "OOM", "HEADROOM_FAIL"}:
+                    try:
+                        _validate_worker_for_probe(
+                            worker,
+                            protocol=args.protocol,
+                            role=role,
+                            stage=stage,
+                            feedback=feedback,
+                            micro_batch=micro_batch,
+                            accumulation=accumulation,
+                            height=height,
+                            width=width,
+                            input_bindings=input_bindings,
+                        )
+                    except Exception as error:
                         fatal_error = {
                             "template_role": role,
                             "stage": stage,
                             "feedback": feedback,
-                            "status": status,
+                            "status": "INVALID_WORKER_EVIDENCE",
                             "returncode": worker.get("returncode"),
-                            "error": worker.get("error"),
+                            "error": f"{type(error).__name__}: {error}",
                         }
                         break
+                    probes.extend(_probe_records(worker, role, stage, feedback))
                 if fatal_error is not None:
                     break
             if fatal_error is not None:
@@ -965,6 +1263,28 @@ def execute_driver(args) -> tuple[dict, bool]:
             }
             break
 
+    try:
+        bindings_after = preflight_input_bindings(
+            root,
+            args.protocol,
+            stage_a_checkpoint=Path(args.stage_a_checkpoint).resolve(),
+            coordinate_stats=main_stats,
+        )
+    except Exception as error:
+        bindings_after = None
+        fatal_error = fatal_error or {
+            "status": "INPUT_DRIFT",
+            "error": f"{type(error).__name__}: {error}",
+        }
+    inputs_unchanged = bindings_after == input_bindings
+    if not inputs_unchanged:
+        fatal_error = fatal_error or {
+            "status": "INPUT_DRIFT",
+            "error": "preflight code/config/checkpoint/statistics changed during probing",
+        }
+        selected_candidate = None
+        selected_runtime = None
+
     payload = {
         "schema": SCHEMA,
         "protocol": args.protocol,
@@ -972,8 +1292,14 @@ def execute_driver(args) -> tuple[dict, bool]:
         "attempts": attempts,
         "selected_candidate": selected_candidate,
         "selected": selected_runtime,
-        "all_pass": selected_candidate is not None and fatal_error is None,
+        "all_pass": (
+            selected_candidate is not None
+            and fatal_error is None
+            and inputs_unchanged
+        ),
         "fatal_error": fatal_error,
+        "input_bindings": input_bindings,
+        "inputs_unchanged_through_preflight": inputs_unchanged,
         "native_shape": [height, width],
         "native_shape_semantics": "height_width",
         "native_shape_evidence": shape_evidence,

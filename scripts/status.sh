@@ -24,7 +24,7 @@ for name in ('aio3', 'aio5'):
 PY
 echo "ACTIVE TRAINING"
 ps -eo pid,etime,stat,%cpu,%mem,cmd | \
-  awk '/scripts\/orchestrate\.py/ || /scripts\/train_stage_a_ddp\.py/ || (/scripts\/train\.py/ && $4 + 0 >= 10)' || true
+  awk '/scripts\/orchestrate\.py/ || /scripts\/train_stage_a_ddp\.py/ || /scripts\/train_stage_a_capacity_hybrid_ddp\.py/ || /scripts\/train_baseline_hybrid_ddp\.py/ || (/scripts\/train\.py/ && $4 + 0 >= 10)' || true
 latest_train_log=$(find artifacts/logs -maxdepth 3 -type f -name '*.log' \
   ! -name 'watchdog.log' ! -name 'pipeline.log' -printf '%T@ %p\n' 2>/dev/null | \
   sort -nr | awk 'NR==1 {$1=""; sub(/^ /, ""); print}')

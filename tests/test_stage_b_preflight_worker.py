@@ -198,6 +198,26 @@ def test_driver_fails_fatally_on_non_oom_worker_error(
         return {"schema": preflight.SCHEMA, "status": "ERROR", "error": "finite"}
 
     monkeypatch.setattr(preflight, "_run_worker", failed_worker)
+    bindings = {
+        "protocol": "aio5",
+        "roles": {
+            "main": {
+                "template_path": str(template.resolve()),
+                "template_sha256": "mock",
+                "stage_a_checkpoint": str(checkpoint.resolve()),
+                "stage_a_checkpoint_sha256": "mock",
+                "init_policy": "COARSE_ONLY_FROM_SELECTED_STAGE_A",
+                "coordinate_stats_path": str(stats.resolve()),
+                "coordinate_stats_sha256": "mock",
+                "coordinate_stats_origin": "TEMPLATE_BOUND",
+            }
+        },
+        "split_manifest": {"path": str(split.resolve()), "sha256": "mock"},
+        "code_sha256": {"mock": "mock"},
+    }
+    monkeypatch.setattr(
+        preflight, "preflight_input_bindings", lambda *_args, **_kwargs: bindings
+    )
     output = tmp_path / "result.json"
     args = SimpleNamespace(
         root=str(tmp_path),
@@ -214,7 +234,7 @@ def test_driver_fails_fatally_on_non_oom_worker_error(
     payload, passed = preflight.execute_driver(args)
     assert passed is False
     assert len(calls) == 1
-    assert payload["fatal_error"]["status"] == "ERROR"
+    assert payload["fatal_error"]["status"] == "INVALID_WORKER_EVIDENCE"
     assert payload["selected_candidate"] is None
     assert payload["all_pass"] is False
 
@@ -224,3 +244,143 @@ def test_native_shape_constants_are_explicit_height_width():
         "aio3": (736, 544),
         "aio5": (720, 1280),
     }
+
+
+def _memory_snapshot(*, free_gib: float = 3.0, reserved_gib: float = 20.0):
+    total = 24 * 2**30
+    reserved = int(reserved_gib * 2**30)
+    free = int(free_gib * 2**30)
+    headroom = min(total - reserved, free)
+    return {
+        "peak_allocated_bytes": reserved - 2**20,
+        "peak_reserved_bytes": reserved,
+        "free_bytes_after_probe": free,
+        "total_bytes": total,
+        "headroom_bytes": headroom,
+        "required_headroom_bytes": preflight.MIN_HEADROOM_BYTES,
+        "headroom_pass": headroom >= preflight.MIN_HEADROOM_BYTES,
+    }
+
+
+def _complete_probe_record(status: str = "PASS"):
+    binding = {
+        "protocol": "aio3",
+        "roles": {
+            "main": {
+                "template_path": "/registered/stage_b.yaml",
+                "template_sha256": "c" * 64,
+                "stage_a_checkpoint": "/registered/stage_a.pt",
+                "stage_a_checkpoint_sha256": "a" * 64,
+                "init_policy": "COARSE_ONLY_FROM_SELECTED_STAGE_A",
+                "coordinate_stats_path": "/registered/stats.json",
+                "coordinate_stats_sha256": "s" * 64,
+                "coordinate_stats_origin": "TEMPLATE_BOUND",
+            }
+        },
+        "split_manifest": {
+            "path": "/registered/split.json",
+            "sha256": "m" * 64,
+        },
+        "code_sha256": {"scripts/train.py": "t" * 64},
+    }
+    train_evidence = {
+        "optimizer_updates": 3,
+        "micro_steps": 12,
+        "expected_micro_steps": 12,
+        "finite_losses_gradients_predictions": True,
+        "gradient_routing": {
+            "frozen_encoder_d1_gradients": 0,
+            "d2_gradient_parameter_count": 10,
+            "assessor_gradient_parameter_count": 0,
+        },
+        "adam": {
+            "optimizer": "Adam",
+            "state_parameter_count": 10,
+            "state_tensor_bytes": 123456,
+            "all_observed_gradient_parameters_have_moments": True,
+        },
+        "memory": _memory_snapshot(),
+    }
+    native_evidence = {
+        "input_shape": [1, 3, 736, 544],
+        "output_shape": [1, 3, 736, 544],
+        "tile": 0,
+        "finite_prediction": True,
+        "quality_metrics_computed": False,
+        "adam_state_retained_bytes": 123456,
+        "memory": _memory_snapshot(),
+    }
+    worker = {
+        "schema": preflight.SCHEMA,
+        "status": status,
+        "protocol": "aio3",
+        "template_role": "main",
+        "stage": "b_oracle",
+        "feedback": "O7",
+        "micro_batch": 16,
+        "accumulation": 4,
+        "effective_batch": 64,
+        "init_scope": "coarse_only_fresh_seeded_feedback_path",
+        "stage_a_checkpoint": "/registered/stage_a.pt",
+        "stage_a_checkpoint_sha256": "a" * 64,
+        "config": "/registered/stage_b.yaml",
+        "config_sha256": "c" * 64,
+        "coordinate_stats_path": "/registered/stats.json",
+        "coordinate_stats_sha256": "s" * 64,
+        "coordinate_stats_origin": "TEMPLATE_BOUND",
+        "split_manifest_path": "/registered/split.json",
+        "split_manifest_sha256": "m" * 64,
+        "code_sha256": {"scripts/train.py": "t" * 64},
+        "gpu": {"name": "RTX 4090", "total_memory_bytes": 24 * 2**30},
+        "software": {"torch": "2.3", "cuda_runtime": "12.1"},
+        "train_step": train_evidence,
+        "native_val": native_evidence,
+        "optimizer_state_retained_for_native_val": True,
+        "official_test_accessed": False,
+        "quality_metrics_computed": False,
+        "checkpoint_written": False,
+        "run_contract_written": False,
+    }
+    return worker, binding
+
+
+def test_headroom_uses_real_free_memory_not_only_own_peak():
+    snapshot = _memory_snapshot(free_gib=1.0, reserved_gib=20.0)
+    assert snapshot["headroom_bytes"] == 1 * 2**30
+    assert preflight._validate_memory_snapshot(snapshot, "test") is False
+    snapshot["headroom_bytes"] = 4 * 2**30
+    snapshot["headroom_pass"] = True
+    with pytest.raises(RuntimeError, match="real free memory"):
+        preflight._validate_memory_snapshot(snapshot, "test")
+
+
+def test_only_explicit_oom_or_derived_headroom_can_fallback():
+    worker, bindings = _complete_probe_record()
+    kwargs = dict(
+        protocol="aio3",
+        role="main",
+        stage="b_oracle",
+        feedback="O7",
+        micro_batch=16,
+        accumulation=4,
+        height=736,
+        width=544,
+        input_bindings=bindings,
+    )
+    assert preflight._validate_worker_for_probe(worker, **kwargs) == "PASS"
+
+    incomplete = dict(worker)
+    incomplete.pop("native_val")
+    with pytest.raises(RuntimeError, match="native probe lacks"):
+        preflight._validate_worker_for_probe(incomplete, **kwargs)
+
+    false_headroom, _ = _complete_probe_record(status="HEADROOM_FAIL")
+    false_headroom["native_val"]["memory"] = _memory_snapshot(free_gib=1.0)
+    assert (
+        preflight._validate_worker_for_probe(false_headroom, **kwargs)
+        == "HEADROOM_FAIL"
+    )
+
+    arbitrary, _ = _complete_probe_record(status="ERROR")
+    with pytest.raises(RuntimeError, match="non-memory worker failure"):
+        preflight._validate_worker_for_probe(arbitrary, **kwargs)

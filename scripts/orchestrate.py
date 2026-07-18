@@ -22,6 +22,7 @@ import torch
 import yaml
 
 from scripts import train_baseline_hybrid_ddp as hybrid_ddp
+from scripts import train_stage_a_capacity_hybrid_ddp as capacity_hybrid_ddp
 from scripts.eval_locked import (
     EXPECTED_TASKS,
     OFFICIAL_MANIFEST_SCHEMA_VERSION,
@@ -31,8 +32,10 @@ from scripts.eval_locked import (
 )
 from scripts.runtime_accounting import read_runtime_sidecar
 from scripts.stage_b_runtime import (
+    REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG,
     StageBRuntimeBundle,
     assert_no_runtime_worker_override,
+    assert_stage_b_cublas_environment,
     ensure_stage_b_runtime_bundle,
     runtime_identity_for_config,
 )
@@ -76,6 +79,7 @@ CONTRACTS = [
     ROOT / "scripts/create_locked_split.py",
     ROOT / "scripts/train_baseline_hybrid.py",
     ROOT / "scripts/train_baseline_hybrid_ddp.py",
+    ROOT / "scripts/train_stage_a_capacity_hybrid_ddp.py",
     ROOT / "scripts/verify_promptir_baseline.py",
     ROOT / "scripts/eval_locked.py",
     ROOT / "scripts/eval_local_composite.py",
@@ -98,6 +102,7 @@ CONTRACTS = [
     ROOT / "configs/protocol_aio3.yaml",
     ROOT / "configs/protocol_aio3_baseline_b120.yaml",
     ROOT / "configs/protocol_aio3_baseline_hybrid.yaml",
+    ROOT / "configs/protocol_aio3_10_10_hybrid.yaml",
     ROOT / "configs/protocol_aio5.yaml",
     ROOT / "configs/stage_b_aio3.yaml",
     ROOT / "configs/stage_b_aio5.yaml",
@@ -1144,6 +1149,9 @@ def _run_cache_expectation(
             "coordinate_stats_sha256": coordinate_stats,
             "code_sha256": current_train_code_hashes(),
             "deterministic_algorithms": True,
+            "cublas_workspace_config": os.environ.get(
+                "CUBLAS_WORKSPACE_CONFIG"
+            ),
         }
         contract.update(runtime_identity)
         return {
@@ -1186,10 +1194,9 @@ def run_contract_matches_current(
     try:
         payload = json.loads(path.read_text())
         contract = expected["contract"]
-        # Compare every scientific/runtime field written by train.py.  The
-        # CUBLAS environment is intentionally retained as an additional audit
-        # field but is not a cache identity field requested by this protocol.
-        if any(payload.get(key) != value for key, value in contract.items()):
+        # A cache hit requires exact equality with every scientific/runtime
+        # field written by train.py; extra or missing fields are drift too.
+        if payload != contract:
             return False
         contract_sha = _sha256_file(path)
         saved_config = checkpoint_args.get("config")
@@ -1967,18 +1974,31 @@ def _hybrid_ddp_expectation(
     config: Path,
     stage: str,
     workers_per_rank: int,
+    implementation=hybrid_ddp,
 ) -> tuple[dict, argparse.Namespace, dict]:
     """Build exactly the run contract the dedicated DDP trainer must write."""
-    if stage not in hybrid_ddp.reference.ALLOWED_STAGES:
+    allowed = getattr(
+        implementation,
+        "ALLOWED_STAGES",
+        implementation.reference.ALLOWED_STAGES,
+    )
+    if stage not in allowed:
         raise ValueError(f"unsupported hybrid DDP stage: {stage!r}")
     config = Path(config).resolve()
-    cfg = hybrid_ddp.reference.load_and_validate_config(config)
+    loader = getattr(
+        implementation,
+        "load_and_validate_config",
+        implementation.reference.load_and_validate_config,
+    )
+    cfg = loader(config)
     args = argparse.Namespace(
         config=str(config),
         stage=stage,
         run_name=run_name,
     )
-    contract = hybrid_ddp.run_contract_payload(cfg, args, workers_per_rank)
+    contract = implementation.run_contract_payload(
+        cfg, args, workers_per_rank
+    )
     return cfg, args, contract
 
 
@@ -2140,6 +2160,7 @@ def hybrid_ddp_complete(
     config: Path,
     stage: str,
     workers_per_rank: int,
+    implementation=hybrid_ddp,
 ) -> bool:
     """Fail-closed completion predicate for an uncompressed AIO-3 hybrid arm.
 
@@ -2157,6 +2178,7 @@ def hybrid_ddp_complete(
             config=config,
             stage=stage,
             workers_per_rank=workers_per_rank,
+            implementation=implementation,
         )
         # Hybrid checkpoints are deliberately retained as last + top3.  A
         # generic compaction marker is evidence of a mixed cache family.
@@ -2175,6 +2197,13 @@ def hybrid_ddp_complete(
         epochs = int(cfg["epochs"])
         selection = _formal_selection(run_name, epochs)
         if selection is None:
+            return False
+        if implementation is capacity_hybrid_ddp and len(
+            selection["top3_records"]
+        ) != 3:
+            # Forty-eight locked-validation boundaries must deterministically
+            # leave a complete top-3 selection, not a partially committed
+            # index that merely happens to contain top3[0].
             return False
         expected_validation_epochs = list(range(5, epochs + 1, 5))
         if sorted(int(row["epoch"]) for row in selection["metric_rows"]) != (
@@ -2207,7 +2236,7 @@ def hybrid_ddp_complete(
         last_payload = torch.load(
             last_path, map_location="cpu", weights_only=False
         )
-        hybrid_ddp.validate_resume_payload(
+        implementation.validate_resume_payload(
             last_payload,
             cfg,
             expected_args,
@@ -2240,7 +2269,7 @@ def hybrid_ddp_complete(
             != hybrid_ddp.schedule_digest(last_records)
         ):
             return False
-        model = hybrid_ddp.build_model(cfg, stage)
+        model = implementation.build_model(cfg, stage)
         model.load_state_dict(last_payload["model"], strict=True)
         model_signature = _state_signature(last_payload["model"])
         del model
@@ -2254,7 +2283,7 @@ def hybrid_ddp_complete(
             payload = torch.load(
                 checkpoint, map_location="cpu", weights_only=False
             )
-            hybrid_ddp.validate_resume_payload(
+            implementation.validate_resume_payload(
                 payload,
                 cfg,
                 expected_args,
@@ -2744,6 +2773,7 @@ def train_command(
         raise RuntimeError(f"training config is not a mapping: {config}")
     runtime_identity = runtime_identity_for_config(config, effective_config)
     assert_no_runtime_worker_override(effective_config)
+    assert_stage_b_cublas_environment(runtime_identity)
     command = [
         sys.executable, "scripts/train.py", "--config", str(config), "--stage", stage,
         "--feedback", feedback, "--run-name", run_name,
@@ -2800,6 +2830,38 @@ def hybrid_ddp_train_command(
     return command
 
 
+def capacity_hybrid_ddp_train_command(
+    config: Path,
+    run_name: str,
+    *,
+    workers_per_rank: int,
+) -> list[str]:
+    """Build the isolated all-four-GPU exact-update 10/10 Stage-A command."""
+    # Validate before scheduling any GPU process.  This proves the training
+    # protocol matches the primary hybrid schedule and only ownership differs.
+    capacity_hybrid_ddp.load_and_validate_config(config)
+    command = [
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
+        "--standalone",
+        f"--nproc-per-node={hybrid_ddp.WORLD_SIZE}",
+        "scripts/train_stage_a_capacity_hybrid_ddp.py",
+        "--config",
+        str(Path(config).resolve()),
+        "--run-name",
+        run_name,
+        "--workers-per-rank",
+        str(workers_per_rank),
+    ]
+    last = ROOT / "artifacts/checkpoints" / run_name / "last.pt"
+    if last.is_file():
+        command += ["--resume", str(last)]
+    else:
+        command.append("--fresh")
+    return command
+
+
 def acquire_process_lock(path: Path) -> int:
     """Acquire a crash-safe, non-blocking process lock.
 
@@ -2829,8 +2891,8 @@ def run_aio3_capacity_robustness(
 ) -> bool:
     """Run the preregistered 10/10 ownership split after the main Stage-B GO.
 
-    The total decoder budget and per-scale total remain unchanged: the main
-    split owns 6/14 D1/D2 blocks, while this control owns 10/10.  It is trained
+    The total 20-block decoder budget remains unchanged: the main split owns
+    6/14 D1/D2 blocks, while this control owns 10/10.  It is trained
     from scratch and evaluates only the two required orderings, without a new
     hyperparameter search or feedback ladder.
     """
@@ -2850,17 +2912,43 @@ def run_aio3_capacity_robustness(
         != runtime_bundle.capacity_config_sha256
     ):
         raise RuntimeError("AIO3 10/10 runtime bundle drift; batch reselection forbidden")
-    config = ROOT / "configs/protocol_aio3_10_10.yaml"
+    # One immutable config owns 10/10 Stage-A, its cache and coordinate
+    # statistics.  Its non-model training protocol exactly matches the main
+    # AIO-3 hybrid schedule; the only architectural change is D1/D2 ownership.
+    config = ROOT / "configs/protocol_aio3_10_10_hybrid.yaml"
     stage_b_config = runtime_bundle.capacity_config
-    cfg = yaml.safe_load(config.read_text())
+    cfg = capacity_hybrid_ddp.load_and_validate_config(config)
     stage_b_cfg = yaml.safe_load(stage_b_config.read_text())
+    if stage_b_cfg.get("model") != cfg.get("model"):
+        raise RuntimeError(
+            "10/10 Stage-A and frozen Stage-B model definitions differ"
+        )
     stage_a_name = f"aio3_stage_a_coarse_10_10_seed{cfg['seed']}"
     stage_a_last = ROOT / "artifacts/checkpoints" / stage_a_name / "last.pt"
-    if not checkpoint_complete(stage_a_last, cfg["epochs"]):
+    workers_per_rank = hybrid_ddp_workers_per_rank()
+    if not hybrid_ddp_complete(
+        stage_a_name,
+        config=config,
+        stage="a",
+        workers_per_rank=workers_per_rank,
+        implementation=capacity_hybrid_ddp,
+    ):
         run(
-            train_command(config, "a", stage_a_name, "O7", None),
+            capacity_hybrid_ddp_train_command(
+                config,
+                stage_a_name,
+                workers_per_rank=workers_per_rank,
+            ),
             f"{stage_a_name}.log",
         )
+    if not hybrid_ddp_complete(
+        stage_a_name,
+        config=config,
+        stage="a",
+        workers_per_rank=workers_per_rank,
+        implementation=capacity_hybrid_ddp,
+    ):
+        raise RuntimeError("10/10 capacity Stage-A hybrid transaction incomplete")
     stage_a = best_checkpoint(stage_a_name)
     note(f"SELECT 10/10 Stage-A locked-val checkpoint `{stage_a}`")
     ensure_stage_a_locked_val_cache(
