@@ -410,8 +410,8 @@
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "a7ae3e794934c2e389b6b73b6fff2aa5183fbaa51cbfa1a1f41d8be81eb05328",
-      "size": 50729
+      "sha256": "6b36db0ce78bd3ae0531013af64f9126f5c6e907e29e14bfd7c4bb69b07ddf4c",
+      "size": 52619
     },
     "recovery/ENVIRONMENT.json": {
       "sha256": "05741951f8cb7a85edf6089d524d0c6c0dd0a770f3c5d1dc07b2de77bbeddd82",
