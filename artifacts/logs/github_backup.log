@@ -73,3 +73,30 @@ https://github.com/emma-sue/aaa/releases/tag/resume-aio3-stage-a
 * Request to https://api.github.com/repos/emma-sue/aaa/releases
 * Request took 2.04955861s
 https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0115-s0187125
+{
+  "status": "PASS",
+  "files": 205,
+  "bytes": 27243939,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main 021c473] backup: reproducible snapshot 2026-07-18T14:20:34.875785+00:00
+ 46 files changed, 4459 insertions(+), 81318 deletions(-)
+ create mode 100644 LICENSE.md
+ create mode 100644 artifacts/metrics/stage_a_epoch150_trend.json
+ create mode 100644 scripts/preflight_stage_b_runtime.py
+ create mode 100755 scripts/reload_github_backup_when_idle.py
+ create mode 100644 scripts/stage_b_runtime.py
+ create mode 100644 tests/test_stage_b_preflight_worker.py
+ create mode 100644 tests/test_stage_b_runtime.py
+ delete mode 100644 vendor/autosota/SKILL.md
+ delete mode 100644 vendor/r2r/data_dir/gopro/train_gopro.txt
+ delete mode 100644 vendor/r2r/data_dir/hazy/hazy_outside.txt
+ delete mode 100644 vendor/r2r/data_dir/lol/train_lol.txt
+ delete mode 100644 vendor/r2r/data_dir/noisy/denoise.txt
+ delete mode 100644 vendor/r2r/data_dir/rainy/rainTrain.txt
+ delete mode 100644 vendor/r2r/utils/image_utils.py
+ delete mode 100644 vendor/r2r/utils/schedulers.py
+ delete mode 100755 vendor/researchstudio/idea_spark_SKILL.md
+To https://github.com/emma-sue/aaa.git
+   cf7fa09..021c473  main -> main
+[2026-07-18T14:20:41.177041+00:00] backup iteration PASS

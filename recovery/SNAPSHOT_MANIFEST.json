@@ -38,16 +38,16 @@
       "size": 631
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "3e3bee0b4da750c11c6149ea688a9770df88c496aba9fc4c871ee0f6d8c1b9d0",
-      "size": 550656
+      "sha256": "ef0b739e2ca1e4524604e1788d46fcf7dcd65d02a9664a9a36393eae764c369d",
+      "size": 551143
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "24416eac48ad9311a599b27a301a3f146ca3f4bab3b9583ae2770d98d8b8a9d9",
-      "size": 460996
+      "sha256": "d76f397bebda47e05e7aea50d698c7fbdbc51cf43c1b29b479b166448b205958",
+      "size": 461823
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -62,8 +62,8 @@
       "size": 226
     },
     "artifacts/logs/github_backup.log": {
-      "sha256": "9b6f5d3ed1bccca36a678a2d013215b9ff460f86cf42fe902828500cf3ee27d3",
-      "size": 3938
+      "sha256": "20f93e610fa95ecda502161607487fec541945918a4684675819dd11b421e433",
+      "size": 5204
     },
     "artifacts/logs/orchestrate_aio3_pytest.log": {
       "sha256": "4e5e3ad73a69901f965ca422259e37c9ed38fe2a879f91e7c0952f350162a871",
@@ -74,8 +74,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "5bfdda0e255c2a8bbfadddb22d55e791644cab66720e45ccb0bf1cfcc64e8fa8",
-      "size": 461146
+      "sha256": "faa9e184a2b4304fe1c1b9570d38391d97c5708b816184fcf6d010ec9f9225c9",
+      "size": 461973
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -398,11 +398,11 @@
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "58a9094b0d27dd92feec8b5ff70093a6a98bf94e9110ec4f6dd0d69e9395f7d2",
+      "sha256": "cc6b293209dae4c92afe84789a52bd7aed3f1fcfb9c64622430386d89ae2faa6",
       "size": 9851
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "6be9e8ebfb22ef2560da9149ad4a312583ba4ee0c0a71e3b486d14fa931d4f80",
+      "sha256": "69bd1d89a4e94303271d48793d3ef22bc8540b8e37c335b7cca50ebec645eef5",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -830,7 +830,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T14:20:34.175792+00:00",
+  "generated_utc": "2026-07-18T14:21:45.223180+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }
