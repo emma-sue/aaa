@@ -33,6 +33,8 @@
       "training_origin": null
     },
     "epoch": 145,
+    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
     "mtime_ns": 1784381838022252591,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
     "protocol": "aio3",
@@ -47,6 +49,10 @@
     "step": 221535
   },
   "generated_utc": "2026-07-18T14:21:43.954780+00:00",
+  "git_snapshot": {
+    "commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+    "tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410"
+  },
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
@@ -77,6 +83,8 @@
       "step": 228417,
       "training_origin": null
     },
+    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
     "mtime_ns": 1784384307584890292,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
@@ -117,6 +125,8 @@
       "step": 228417,
       "training_origin": null
     },
+    "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+    "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
     "mtime_ns": 1784384307584890292,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
@@ -166,6 +176,8 @@
         "training_origin": null
       },
       "epoch": 145,
+      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
       "mtime_ns": 1784381838022252591,
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
       "protocol": "aio3",
@@ -209,6 +221,8 @@
         "training_origin": null
       },
       "epoch": 125,
+      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
       "mtime_ns": 1784373590652626428,
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
       "protocol": "aio3",
@@ -252,6 +266,8 @@
         "training_origin": null
       },
       "epoch": 115,
+      "git_snapshot_commit": "2b3d79f7bd7ce61cfc2cd8a08c6683d2aef0e656",
+      "git_snapshot_tree": "defccf0bd23abd74e8d3033b7c9a0c33a2259410",
       "mtime_ns": 1784369468737726916,
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch115_step0187125.pt",
       "protocol": "aio3",
