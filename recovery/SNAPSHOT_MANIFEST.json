@@ -42,16 +42,16 @@
       "size": 385
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "7c5a421a73ff78fa818a091f4f49621af72f3ad690620b059662f58a9657a94d",
-      "size": 562419
+      "sha256": "519945e827fea2798e12cbe85e627c29a70a9e1733be71ad15a07e638177d724",
+      "size": 562541
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "ed162eb64f6b7595dbdd893e16cecd6ee22b81727c748bf41c5dd8b082c91fcd",
-      "size": 481236
+      "sha256": "57f2836cd24dbb83c990a6d9f750133d3d46fdb365c7814ddb4946ee153a8860",
+      "size": 481443
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -78,8 +78,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "84dbe442e78c877bf6372e7e4ee5bce9d70ec0780eca82aa8062ffc95d7f29b6",
-      "size": 481386
+      "sha256": "016dae13ed62dd48a10d9711f3fd980b3592bdff354412dfe9a132a6c4f01e3a",
+      "size": 481593
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -410,11 +410,11 @@
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "6b36db0ce78bd3ae0531013af64f9126f5c6e907e29e14bfd7c4bb69b07ddf4c",
-      "size": 52619
+      "sha256": "1773b9b3c1a39b4b519ca23604530c723f47f3cd05916f742d2f8ad46ca54593",
+      "size": 50729
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "05741951f8cb7a85edf6089d524d0c6c0dd0a770f3c5d1dc07b2de77bbeddd82",
+      "sha256": "db96cefc2e9747f97d20d1916ffeab9a698f1dfaa3b82433accd08cf9a47569d",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -862,7 +862,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T14:49:42.552376+00:00",
+  "generated_utc": "2026-07-18T14:49:59.579628+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }
