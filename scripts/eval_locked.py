@@ -19,7 +19,6 @@ import numpy as np
 import torch
 import yaml
 from skimage.metrics import structural_similarity
-from torch.nn import functional as F
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -234,6 +233,15 @@ def validate_shared_stage_b_terminal_marker(
             raise PermissionError(
                 f"invalid frozen Stage-B attestation for {protocol}"
             ) from error
+        terminal = payload.get("terminal_decision") if isinstance(payload, dict) else None
+        terminal_sha = (
+            hashlib.sha256(
+                json.dumps(
+                    terminal, sort_keys=True, separators=(",", ":")
+                ).encode()
+            ).hexdigest()
+            if isinstance(terminal, dict) else None
+        )
         if not isinstance(payload, dict) or not all((
             payload.get("schema_version") == SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
             payload.get("status") == "FROZEN",
@@ -244,6 +252,20 @@ def validate_shared_stage_b_terminal_marker(
             _is_sha256(payload.get("terminal_decision_sha256")),
             _is_sha256(payload.get("decision_revision_sha256")),
             isinstance(payload.get("official_access_authorized"), bool),
+            terminal_sha == payload.get("terminal_decision_sha256"),
+            terminal.get("protocol") == protocol if isinstance(terminal, dict) else False,
+            terminal.get("stage") == payload.get("stage")
+            if isinstance(terminal, dict) else False,
+            terminal.get("predicted_go") == payload.get("predicted_go")
+            if isinstance(terminal, dict) else False,
+            terminal.get("scientific_go") == payload.get("scientific_go")
+            if isinstance(terminal, dict) else False,
+            terminal.get("capacity_robustness_go")
+            == payload.get("capacity_robustness_go")
+            if isinstance(terminal, dict) else False,
+            terminal.get("decision_revision_sha256")
+            == payload.get("decision_revision_sha256")
+            if isinstance(terminal, dict) else False,
         )):
             raise PermissionError(
                 f"frozen Stage-B attestation fields are incomplete for {protocol}"
@@ -265,6 +287,7 @@ def validate_shared_stage_b_terminal_marker(
 
 def _official_data_payload(cfg: dict) -> dict:
     """Hash the exact official identities without decoding pixels or using CUDA."""
+    validate_shared_stage_b_terminal_marker(ROOT)
     protocol = cfg["protocol"]
     sets = build_test_sets(cfg["data_root"], protocol)
     digest_cache: dict[Path, str] = {}

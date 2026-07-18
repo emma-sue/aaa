@@ -42,6 +42,17 @@ STAGE_A_CODE_FILES = (
     "src/net/restormer_blocks.py",
     "src/losses/objectives.py",
 )
+REGISTERED_LEGACY_AIO3_RUN = "aio3_stage_a_coarse_seed1415926"
+REGISTERED_LEGACY_AIO3_RUNTIME = {
+    "world_size": 4,
+    "global_effective_batch": 120,
+    "per_gpu_batch": 30,
+    "accumulation": 1,
+    "backend": "nccl",
+}
+REGISTERED_LEGACY_AIO3_WORKERS = 8
+REGISTERED_LEGACY_AIO3_EPOCH = 240
+REGISTERED_LEGACY_AIO3_STEP = 330_500
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +72,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-workers-per-rank", type=int)
     parser.add_argument("--expected-backend")
     parser.add_argument("--expected-training-origin")
+    parser.add_argument(
+        "--legacy-runtime-attestation",
+        type=Path,
+        help=(
+            "external live-runtime evidence for the one registered legacy "
+            "AIO-3 Stage-A lineage; valid only together with "
+            "--legacy-reassessment-dir"
+        ),
+    )
+    parser.add_argument(
+        "--legacy-reassessment-dir",
+        type=Path,
+        help=(
+            "completed locked-val top3+terminal reassessment for the one "
+            "registered legacy AIO-3 Stage-A lineage"
+        ),
+    )
     parser.add_argument("--require-validation-complete", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument("--timeout-hours", type=float, default=2.0)
@@ -85,6 +113,7 @@ def validation_artifact_integrity(
     expected_data_contract: dict | None = None,
     expected_code_contract: dict | None = None,
     require_paired_rows: bool = False,
+    legacy_reassessment_verified: bool = False,
 ) -> tuple[dict[str, bool], dict]:
     metric_path = ROOT / "artifacts/metrics" / f"{run_name}_locked_val.jsonl"
     run_dir = ROOT / "artifacts/checkpoints" / run_name
@@ -138,14 +167,20 @@ def validation_artifact_integrity(
             try:
                 if any(not math.isfinite(float(row[task])) for task in expected_tasks):
                     metric_task_schema_valid = False
-                setting_ssim = row["setting_ssim"]
-                if set(setting_ssim) != expected_tasks or any(
-                    not math.isfinite(float(setting_ssim[task]))
-                    for task in expected_tasks
-                ):
-                    metric_task_schema_valid = False
-                if not math.isfinite(float(row["five_setting_mean_ssim"])):
-                    metric_task_schema_valid = False
+                # The live AIO-3 process predates paired-row/SSIM ledger
+                # support.  Its immutable historical ledger remains PSNR-only;
+                # SSIM is required instead on the separately reassessed top-3
+                # plus terminal candidate set.  Every non-legacy run remains
+                # strict here.
+                if not legacy_reassessment_verified:
+                    setting_ssim = row["setting_ssim"]
+                    if set(setting_ssim) != expected_tasks or any(
+                        not math.isfinite(float(setting_ssim[task]))
+                        for task in expected_tasks
+                    ):
+                        metric_task_schema_valid = False
+                    if not math.isfinite(float(row["five_setting_mean_ssim"])):
+                        metric_task_schema_valid = False
             except (KeyError, TypeError, ValueError, OverflowError):
                 metric_task_schema_valid = False
 
@@ -267,12 +302,14 @@ def validation_artifact_integrity(
                         payload.get("split_manifest_sha256") == expected_split_sha256
                     )
                 runtime = payload.get("distributed_runtime") or {}
-                legacy_aio3_prefix = (
-                    expected_protocol == "aio3" and int(row["epoch"]) <= 55
-                )
-                if expected_runtime is not None and not legacy_aio3_prefix:
+                if expected_runtime is not None:
                     for key, expected in expected_runtime.items():
-                        payload_checks[f"runtime_{key}"] = runtime.get(key) == expected
+                        if key == "workers_per_rank" and legacy_reassessment_verified:
+                            payload_checks[f"runtime_{key}_external"] = (
+                                runtime.get(key) in {None, expected}
+                            )
+                        else:
+                            payload_checks[f"runtime_{key}"] = runtime.get(key) == expected
                     payload_checks["rank_rng_width"] = (
                         len(payload.get("rng_by_rank", []))
                         == int(expected_runtime["world_size"])
@@ -327,6 +364,7 @@ def validation_artifact_integrity(
         "top3_payload_errors": top3_payload_errors,
         "top3_score_errors": top3_score_errors,
         "paired_row_errors": paired_errors,
+        "legacy_reassessment_verified": legacy_reassessment_verified,
     }
     return checks, details
 
@@ -339,7 +377,9 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def data_contract_integrity(payload: dict) -> tuple[dict[str, bool], dict]:
+def data_contract_integrity(
+    payload: dict, *, legacy_reassessment_verified: bool = False
+) -> tuple[dict[str, bool], dict]:
     """Verify split, current lists and materialization are one frozen dataset."""
     cfg = payload["config"]
     protocol = cfg["protocol"]
@@ -366,7 +406,8 @@ def data_contract_integrity(payload: dict) -> tuple[dict[str, bool], dict]:
     }
     checkpoint_contract = payload.get("data_contract")
     registered_legacy_aio3 = (
-        protocol == "aio3"
+        legacy_reassessment_verified
+        and protocol == "aio3"
         and checkpoint_contract is None
         and (
             payload.get("training_origin") is None
@@ -406,11 +447,15 @@ def data_contract_integrity(payload: dict) -> tuple[dict[str, bool], dict]:
     return checks, details
 
 
-def code_contract_integrity(payload: dict) -> tuple[dict[str, bool], dict]:
+def code_contract_integrity(
+    payload: dict, *, legacy_reassessment_verified: bool = False
+) -> tuple[dict[str, bool], dict]:
     protocol = payload["config"]["protocol"]
     current = {relative: sha256(ROOT / relative) for relative in STAGE_A_CODE_FILES}
     checkpoint = payload.get("code_contract")
-    registered_legacy_aio3 = protocol == "aio3" and checkpoint is None
+    registered_legacy_aio3 = (
+        legacy_reassessment_verified and protocol == "aio3" and checkpoint is None
+    )
     checks = {
         "checkpoint_code_contract_matches": (
             checkpoint == current or registered_legacy_aio3
@@ -421,6 +466,190 @@ def code_contract_integrity(payload: dict) -> tuple[dict[str, bool], dict]:
         "checkpoint_contract_present": checkpoint is not None,
         "registered_legacy_aio3": registered_legacy_aio3,
     }
+
+
+def registered_legacy_aio3_request(args: argparse.Namespace, payload: dict) -> bool:
+    """Match the sole legacy lineage eligible for external attestation.
+
+    This is deliberately an exact identity, not a general ``protocol ==
+    aio3`` escape hatch.  New runs and AIO-5 must carry their provenance in
+    the checkpoint itself.
+    """
+    runtime = payload.get("distributed_runtime") or {}
+    config = payload.get("config") or {}
+    expected_checkpoint = (
+        ROOT / "artifacts/checkpoints" / REGISTERED_LEGACY_AIO3_RUN / "last.pt"
+    ).resolve()
+    expected_runtime_attestation = (
+        ROOT / "artifacts/manifests/aio3_live_runtime_attestation.json"
+    ).resolve()
+    expected_reassessment = (
+        ROOT
+        / "artifacts/metrics/stage_a_reassessment"
+        / REGISTERED_LEGACY_AIO3_RUN
+    ).resolve()
+    return all(
+        (
+            args.expected_run_name == REGISTERED_LEGACY_AIO3_RUN,
+            args.checkpoint.resolve() == expected_checkpoint,
+            args.config.resolve() == (ROOT / "configs/protocol_aio3.yaml").resolve(),
+            args.legacy_runtime_attestation is not None,
+            args.legacy_runtime_attestation.resolve()
+            == expected_runtime_attestation,
+            args.legacy_reassessment_dir is not None,
+            args.legacy_reassessment_dir.resolve() == expected_reassessment,
+            args.expected_epoch == REGISTERED_LEGACY_AIO3_EPOCH,
+            args.expected_step == REGISTERED_LEGACY_AIO3_STEP,
+            args.minimum_step == REGISTERED_LEGACY_AIO3_STEP,
+            args.expected_world_size == REGISTERED_LEGACY_AIO3_RUNTIME["world_size"],
+            args.expected_global_effective_batch
+            == REGISTERED_LEGACY_AIO3_RUNTIME["global_effective_batch"],
+            args.expected_per_gpu_batch
+            == REGISTERED_LEGACY_AIO3_RUNTIME["per_gpu_batch"],
+            args.expected_accumulation
+            == REGISTERED_LEGACY_AIO3_RUNTIME["accumulation"],
+            args.expected_workers_per_rank == REGISTERED_LEGACY_AIO3_WORKERS,
+            args.expected_backend == REGISTERED_LEGACY_AIO3_RUNTIME["backend"],
+            args.expected_training_origin is None,
+            config.get("protocol") == "aio3",
+            int(config.get("epochs", -1)) == REGISTERED_LEGACY_AIO3_EPOCH,
+            int(payload.get("epoch", -1)) == REGISTERED_LEGACY_AIO3_EPOCH,
+            int(payload.get("step", -1)) == REGISTERED_LEGACY_AIO3_STEP,
+            int(payload.get("batch_in_epoch", -1)) == 0,
+            payload.get("validation_pending") is None,
+            payload.get("training_origin") is None,
+            payload.get("code_contract") is None,
+            payload.get("data_contract") is None,
+            runtime == REGISTERED_LEGACY_AIO3_RUNTIME,
+            len(payload.get("rng_by_rank", []))
+            == REGISTERED_LEGACY_AIO3_RUNTIME["world_size"],
+        )
+    )
+
+
+def legacy_reassessment_integrity(
+    args: argparse.Namespace, payload: dict
+) -> tuple[dict[str, bool], dict]:
+    """Replay the pure verification path of the locked-val reassessment.
+
+    If its output does not yet exist, the called transaction performs the
+    preregistered top3+terminal locked-validation replay.  On an existing
+    output it is idempotent and verifies every bound artifact without reading
+    official-test data.
+    """
+    requested = (
+        args.legacy_runtime_attestation is not None
+        or args.legacy_reassessment_dir is not None
+    )
+    paired = (
+        args.legacy_runtime_attestation is not None
+        and args.legacy_reassessment_dir is not None
+    )
+    checks = {
+        "legacy_evidence_arguments_paired": (not requested) or paired,
+        "legacy_lineage_exactly_registered": False,
+        "legacy_locked_reassessment_verified": False,
+    }
+    details: dict[str, object] = {
+        "requested": requested,
+        "verified": False,
+        "scientific_limit": (
+            "external runtime observation and locked-val reassessment do not "
+            "backfill launch-time code/data provenance"
+        ),
+    }
+    if not requested:
+        # This is not a failed check for ordinary, fully self-attested runs.
+        checks = {"legacy_evidence_not_requested": True}
+        return checks, details
+    if not paired:
+        details["error"] = "both legacy evidence arguments are required"
+        return checks, details
+    registered = registered_legacy_aio3_request(args, payload)
+    checks["legacy_lineage_exactly_registered"] = registered
+    if not registered:
+        details["error"] = "legacy evidence requested for an unregistered lineage"
+        return checks, details
+    try:
+        from scripts.reassess_stage_a_candidates import run_reassessment
+
+        manifest = run_reassessment(
+            config_path=args.config,
+            run_name=args.expected_run_name,
+            runtime_attestation=args.legacy_runtime_attestation,
+            output_dir=args.legacy_reassessment_dir,
+        )
+        selection_path = args.legacy_reassessment_dir / "selection_attestation.json"
+        selection = json.loads(selection_path.read_text())
+        binding = manifest["input_binding"]
+        candidates = binding["candidates"]
+        terminal_sources = [
+            source
+            for candidate in candidates
+            for source in candidate["sources"]
+            if source.get("role") == "terminal_last"
+        ]
+        selected_source = selection["selected"]["source_checkpoint"]
+        runtime_binding = binding["runtime_attestation"]
+        manifest_checks = {
+            "manifest_pass": manifest.get("status") == "PASS",
+            "manifest_scope_locked_val": manifest.get("scope") == "locked_val",
+            "manifest_official_test_false": (
+                manifest.get("official_test_accessed") is False
+            ),
+            "manifest_run": manifest.get("run_name") == args.expected_run_name,
+            "manifest_protocol": manifest.get("protocol") == "aio3",
+            "candidate_count": int(
+                manifest.get("candidate_count_after_dedup", -1)
+            ) in {3, 4},
+            "terminal_candidate_exact": (
+                len(terminal_sources) == 1
+                and int(terminal_sources[0].get("epoch", -1))
+                == REGISTERED_LEGACY_AIO3_EPOCH
+                and int(terminal_sources[0].get("step", -1))
+                == REGISTERED_LEGACY_AIO3_STEP
+                and Path(terminal_sources[0].get("path", "")).resolve()
+                == args.checkpoint.resolve()
+                and terminal_sources[0].get("sha256") == sha256(args.checkpoint)
+            ),
+            "runtime_binding_exact": (
+                Path(runtime_binding.get("path", "")).resolve()
+                == args.legacy_runtime_attestation.resolve()
+                and runtime_binding.get("sha256")
+                == sha256(args.legacy_runtime_attestation)
+                and runtime_binding.get("status") == "PASS"
+                and runtime_binding.get("scientific_limit")
+                == "STATE_EXACT_LEGACY_CODE_DATA_UNPROVEN"
+            ),
+            "selected_checkpoint_exists": (
+                Path(selected_source.get("path", "")).is_file()
+                and selected_source.get("sha256")
+                == sha256(Path(selected_source.get("path", "")))
+            ),
+            "selection_official_test_false": (
+                selection.get("official_test_accessed") is False
+            ),
+            "selection_input_binding": (
+                selection.get("input_binding_sha256")
+                == manifest.get("input_binding_sha256")
+            ),
+        }
+        checks.update({f"legacy_{key}": value for key, value in manifest_checks.items()})
+        checks["legacy_locked_reassessment_verified"] = all(manifest_checks.values())
+        details.update({
+            "verified": checks["legacy_locked_reassessment_verified"],
+            "reassessment_dir": str(args.legacy_reassessment_dir),
+            "manifest_input_binding_sha256": manifest.get(
+                "input_binding_sha256"
+            ),
+            "selection_attestation_sha256": sha256(selection_path),
+            "selected_checkpoint": selected_source,
+            "terminal_checkpoint": terminal_sources[0] if terminal_sources else None,
+            "idempotent_reuse": manifest.get("idempotent_reuse"),
+        })
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError) as error:
+        details["error"] = repr(error)
+    return checks, details
 
 
 def load_if_ready(path: Path, minimum_step: int) -> tuple[dict, int, str] | None:
@@ -517,9 +746,15 @@ def main() -> int:
     split_path = Path(payload["config"]["split_manifest"])
     split_sha = sha256(split_path)
     rng = payload["rng"]
+    legacy_checks, legacy_details = legacy_reassessment_integrity(args, payload)
+    legacy_verified = bool(legacy_details.get("verified"))
     lr_checks, lr_details = learning_rate_integrity(payload)
-    data_checks, data_details = data_contract_integrity(payload)
-    code_checks, code_details = code_contract_integrity(payload)
+    data_checks, data_details = data_contract_integrity(
+        payload, legacy_reassessment_verified=legacy_verified
+    )
+    code_checks, code_details = code_contract_integrity(
+        payload, legacy_reassessment_verified=legacy_verified
+    )
     expected_epoch = args.expected_epoch
     expected_step = args.expected_step
     runtime = payload.get("distributed_runtime") or {}
@@ -538,6 +773,7 @@ def main() -> int:
         **data_checks,
         **code_checks,
         **lr_checks,
+        **legacy_checks,
     }
     if expected_epoch is not None:
         checks["expected_epoch_matches"] = int(payload["epoch"]) == expected_epoch
@@ -564,10 +800,18 @@ def main() -> int:
             int(runtime.get("accumulation", -1)) == args.expected_accumulation
         )
     if args.expected_workers_per_rank is not None:
-        checks["expected_workers_per_rank_matches"] = (
-            int(runtime.get("workers_per_rank", -1))
-            == args.expected_workers_per_rank
-        )
+        if legacy_verified:
+            checks["expected_workers_per_rank_externally_attested"] = (
+                runtime.get("workers_per_rank") in {
+                    None, args.expected_workers_per_rank
+                }
+                and legacy_details.get("verified") is True
+            )
+        else:
+            checks["expected_workers_per_rank_matches"] = (
+                int(runtime.get("workers_per_rank", -1))
+                == args.expected_workers_per_rank
+            )
     if args.expected_backend is not None:
         checks["expected_backend_matches"] = (
             runtime.get("backend") == args.expected_backend
@@ -606,6 +850,7 @@ def main() -> int:
             expected_data_contract=payload.get("data_contract"),
             expected_code_contract=payload.get("code_contract"),
             require_paired_rows=(protocol == "aio5"),
+            legacy_reassessment_verified=legacy_verified,
         )
         checks.update(artifact_checks)
     report = {
@@ -624,6 +869,7 @@ def main() -> int:
         "code_contract": code_details,
         "distributed_runtime": runtime,
         "training_origin": payload.get("training_origin"),
+        "legacy_evidence": legacy_details,
         "validation_artifacts": validation_details,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

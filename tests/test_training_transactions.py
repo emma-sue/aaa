@@ -2,7 +2,6 @@ import csv
 import hashlib
 import importlib.util
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +35,18 @@ def _pilot_cache_fixture(tmp_path, monkeypatch):
     metric_dir = tmp_path / "artifacts/metrics"
     run_dir.mkdir(parents=True)
     metric_dir.mkdir(parents=True)
+    data_manifest = tmp_path / "artifacts/manifests/aio3.json"
+    data_manifest.parent.mkdir(parents=True, exist_ok=True)
+    data_manifest.write_text(json.dumps({
+        "protocol": "aio3",
+        "list_sha256": {"train.txt": "d" * 64},
+    }) + "\n")
+    binding = {
+        "path": str(data_manifest.resolve()),
+        "sha256": hashlib.sha256(data_manifest.read_bytes()).hexdigest(),
+        "list_sha256": {"train.txt": "d" * 64},
+    }
+    monkeypatch.setattr(trainer, "data_manifest_binding", lambda _protocol: binding)
     split = tmp_path / "split.json"
     stats = tmp_path / "stats.json"
     source = tmp_path / "stage_a.pt"
@@ -79,9 +90,35 @@ def _pilot_cache_fixture(tmp_path, monkeypatch):
         "args": vars(args).copy(),
     }
     metric = metric_dir / f"{name}_locked_val.jsonl"
-    metric.write_text(
-        json.dumps({"epoch": 0, "step": 1000, "macro_psnr": 30.0}) + "\n"
-    )
+    paired = metric_dir / "locked_rows" / name / "epoch000_step0001000.csv"
+    paired.parent.mkdir(parents=True)
+    with paired.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["task", "name", "psnr", "ssim"]
+        )
+        writer.writeheader()
+        for task in ("dehaze", "derain", "denoise15", "denoise25", "denoise50"):
+            writer.writerow({
+                "task": task, "name": f"{task}.png", "psnr": 30.0, "ssim": 0.9,
+            })
+    locked = {
+        "epoch": 0,
+        "step": 1000,
+        "macro_psnr": 30.0,
+        "dehaze": 30.0,
+        "derain": 30.0,
+        "denoise15": 30.0,
+        "denoise25": 30.0,
+        "denoise50": 30.0,
+        "setting_ssim": {
+            task: 0.9
+            for task in ("dehaze", "derain", "denoise15", "denoise25", "denoise50")
+        },
+        "five_setting_mean_ssim": 0.9,
+        "paired_rows_path": str(paired.resolve()),
+        "paired_rows_sha256": hashlib.sha256(paired.read_bytes()).hexdigest(),
+    }
+    metric.write_text(json.dumps(locked) + "\n")
     torch.save(checkpoint, run_dir / "last.pt")
     kwargs = {
         "config": config,
@@ -148,9 +185,10 @@ def test_orchestrator_rejects_paired_arm_replay_drift(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrator, "note", lambda _message: None)
     root = tmp_path / "artifacts/manifests/replay_digests"
     common = {
+        "schema": 1,
         "epoch": 1,
         "optimizer_step_end": 10,
-        "sample_count": 64,
+        "sample_count": 640,
         "ordered_sample_identity_sha256": "a" * 64,
         "protocol": "aio3",
         "seed": 7,
@@ -159,13 +197,77 @@ def test_orchestrator_rejects_paired_arm_replay_drift(tmp_path, monkeypatch):
     for name in ("arm_a", "arm_b"):
         directory = root / name
         directory.mkdir(parents=True)
+        contract = tmp_path / "artifacts/checkpoints" / name / "run_contract.json"
+        contract.parent.mkdir(parents=True)
+        contract.write_text(json.dumps({
+            "effective_config": {
+                "protocol": "aio3", "seed": 7, "epochs": 1,
+                "micro_batch": 16, "accumulation": 4, "effective_batch": 64,
+            },
+            "split_manifest_sha256": "b" * 64,
+        }) + "\n")
         (directory / "epoch001.json").write_text(
             json.dumps({"run_name": name, **common}) + "\n"
         )
     orchestrator.assert_matching_replay_digests(["arm_a", "arm_b"])
-    drifted = {**common, "ordered_sample_identity_sha256": "c" * 64}
+    drifted = {
+        "run_name": "arm_b", **common,
+        "ordered_sample_identity_sha256": "c" * 64,
+    }
     (root / "arm_b/epoch001.json").write_text(json.dumps(drifted) + "\n")
     with pytest.raises(RuntimeError, match="paired-arm replay drift"):
+        orchestrator.assert_matching_replay_digests(["arm_a", "arm_b"])
+
+
+def test_orchestrator_replay_gate_rejects_missing_epoch_and_bad_step_sample_set(
+    tmp_path, monkeypatch,
+):
+    orchestrator = load_script("orchestrate.py")
+    monkeypatch.setattr(orchestrator, "ROOT", tmp_path)
+    monkeypatch.setattr(orchestrator, "note", lambda _message: None)
+    for name in ("arm_a", "arm_b"):
+        directory = tmp_path / "artifacts/manifests/replay_digests" / name
+        directory.mkdir(parents=True)
+        contract = tmp_path / "artifacts/checkpoints" / name / "run_contract.json"
+        contract.parent.mkdir(parents=True)
+        contract.write_text(json.dumps({
+            "effective_config": {
+                "protocol": "aio3", "seed": 7, "epochs": 2,
+                "micro_batch": 16, "accumulation": 4, "effective_batch": 64,
+            },
+            "split_manifest_sha256": "b" * 64,
+        }) + "\n")
+        (directory / "epoch001.json").write_text(json.dumps({
+            "schema": 1,
+            "run_name": name,
+            "epoch": 1,
+            "optimizer_step_end": 10,
+            "sample_count": 640,
+            "ordered_sample_identity_sha256": "a" * 64,
+            "protocol": "aio3",
+            "seed": 7,
+            "split_manifest_sha256": "b" * 64,
+        }) + "\n")
+    with pytest.raises(RuntimeError, match="incomplete formal replay epoch set"):
+        orchestrator.assert_matching_replay_digests(["arm_a", "arm_b"])
+
+    for name in ("arm_a", "arm_b"):
+        path = (
+            tmp_path / "artifacts/manifests/replay_digests" / name
+            / "epoch002.json"
+        )
+        path.write_text(json.dumps({
+            "schema": 1,
+            "run_name": name,
+            "epoch": 2,
+            "optimizer_step_end": 19,
+            "sample_count": 640,
+            "ordered_sample_identity_sha256": "a" * 64,
+            "protocol": "aio3",
+            "seed": 7,
+            "split_manifest_sha256": "b" * 64,
+        }) + "\n")
+    with pytest.raises(RuntimeError, match="invalid formal replay"):
         orchestrator.assert_matching_replay_digests(["arm_a", "arm_b"])
 
 
@@ -187,6 +289,19 @@ def test_pilot_complete_requires_exact_budget_and_nonpending_state(tmp_path, mon
     marker = json.loads((run_dir / "pilot_complete.json").read_text())
     marker["selected_locked_val"]["macro_psnr"] = -1.0
     (run_dir / "pilot_complete.json").write_text(json.dumps(marker) + "\n")
+    assert not module.pilot_complete(name, 1000, **kwargs)
+
+
+def test_pilot_selection_recomputes_summary_from_hash_bound_paired_csv(
+    tmp_path, monkeypatch,
+):
+    module, name, _run_dir, _payload, _config, _split, _stats, _source, kwargs = (
+        _pilot_cache_fixture(tmp_path, monkeypatch)
+    )
+    metric = tmp_path / "artifacts/metrics" / f"{name}_locked_val.jsonl"
+    row = json.loads(metric.read_text())
+    row["macro_psnr"] = 99.0
+    metric.write_text(json.dumps(row) + "\n")
     assert not module.pilot_complete(name, 1000, **kwargs)
 
 

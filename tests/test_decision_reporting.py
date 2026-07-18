@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import orchestrate
+from scripts import eval_locked, orchestrate
 
 
 REQUIRED_SCHEMA = {
@@ -108,6 +108,57 @@ def test_predicted_selection_and_residual_outcomes_are_consistent():
     assert orchestrate.residual_code_outcome(0.0) == "TIE"
     assert orchestrate.select_predicted_model(predicted, False) == "RESIDUAL_CODE"
     assert orchestrate.select_predicted_model(predicted, True) == "SRSC_LITE"
+
+
+def _terminal_decision(protocol: str, *, capacity: bool | None = None) -> dict:
+    return {
+        "protocol": protocol,
+        "stage": "STAGE_B_COMPLETE",
+        "oracle_go": True,
+        "predicted_go": True,
+        "scientific_go": "GO" if capacity is not False else "GO_CAPACITY_SENSITIVE",
+        "capacity_robustness_go": capacity,
+        "selected_model": "SRSC_LITE",
+        "stage_b_runtime": {"manifest_sha256": "a" * 64},
+        "decision_revision_sha256": "b" * 64,
+    }
+
+
+def test_shared_stage_b_marker_is_atomic_and_capacity_failure_blocks_official(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(orchestrate, "ROOT", tmp_path)
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    aio3 = _terminal_decision("aio3", capacity=False)
+    aio3_path = reports / "decision_aio3.json"
+    aio3_path.write_text(json.dumps(aio3) + "\n")
+    assert orchestrate.freeze_stage_b_terminal_attestation(
+        "aio3", aio3, aio3_path
+    ) is None
+
+    aio5 = _terminal_decision("aio5")
+    aio5_path = reports / "decision_aio5.json"
+    aio5_path.write_text(json.dumps(aio5) + "\n")
+    marker = orchestrate.freeze_stage_b_terminal_attestation(
+        "aio5", aio5, aio5_path
+    )
+    assert marker is not None
+    payload = eval_locked.validate_shared_stage_b_terminal_marker(
+        tmp_path, require_official_authorization=False
+    )
+    assert payload["official_access_authorized"] is False
+    with pytest.raises(PermissionError, match="capacity gate"):
+        eval_locked.validate_shared_stage_b_terminal_marker(tmp_path)
+
+
+def test_orchestrator_does_not_ignore_capacity_sensitive_10_10_result():
+    source = Path(orchestrate.__file__).read_text()
+    assert "capacity_passed = run_aio3_capacity_robustness(" in source
+    assert source.count('"GO_CAPACITY_SENSITIVE"') >= 3
+    assert "if not capacity_passed:" in source
+    assert "Stage-C and " in source
+    assert "official evaluation are blocked for the 6/14-only claim" in source
 
 
 def _write_local_composite_artifacts(

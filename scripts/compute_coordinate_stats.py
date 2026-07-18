@@ -49,6 +49,40 @@ def deterministic_indices(dataset, limit_per_task: int):
     return selected, counts
 
 
+def selected_sample_records(dataset, indices: list[int]) -> list[dict]:
+    """Serialize the exact train-only identity set without opening image bytes."""
+    records = []
+    for index in indices:
+        sample = dataset.samples[index]
+        records.append({
+            "index": int(index),
+            "task": str(sample.task),
+            "degraded": str(Path(sample.degraded).resolve()),
+            "clean": str(Path(sample.clean).resolve()),
+            "sigma": int(sample.sigma),
+        })
+    return records
+
+
+def canonical_sha256(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def prepared_data_manifest_binding(protocol: str) -> dict:
+    path = ROOT / "artifacts/manifests" / f"{protocol}.json"
+    payload = json.loads(path.read_text())
+    list_sha = payload.get("list_sha256")
+    if payload.get("protocol") != protocol or not isinstance(list_sha, dict) or not list_sha:
+        raise RuntimeError(f"invalid prepared-data manifest: {path}")
+    return {
+        "path": str(path.resolve()),
+        "sha256": file_sha256(path),
+        "list_sha256": dict(sorted(list_sha.items())),
+    }
+
+
 def spatial_sample(tensor: torch.Tensor, maximum: int):
     # B,C,H,W -> C,N, deterministic evenly spaced positions across BHW.
     values = tensor.detach().float().permute(1, 0, 2, 3).reshape(tensor.shape[1], -1)
@@ -142,6 +176,7 @@ def main():
         split_manifest=cfg["split_manifest"], split="train",
     )
     indices, sample_counts = deterministic_indices(dataset, args.limit_per_task)
+    sample_records = selected_sample_records(dataset, indices)
     loader = DataLoader(Subset(dataset, indices), batch_size=args.batch_size, shuffle=False, num_workers=0)
     model = SRSCLite(**model_kwargs(cfg)).cuda().eval()
     checkpoint = torch.load(args.stage_a_checkpoint, map_location="cpu", weights_only=False)
@@ -221,16 +256,31 @@ def main():
     out = Path(cfg["coordinate_stats"])
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {
+        "schema_version": 2,
         "protocol": cfg["protocol"],
         "seed": cfg["seed"],
+        "config_path": str(args.config.resolve()),
+        "config_sha256": file_sha256(args.config),
+        "producer_sha256": {
+            "scripts/compute_coordinate_stats.py": file_sha256(Path(__file__)),
+            "src/net/srsc_coordinates.py": file_sha256(
+                ROOT / "src/net/srsc_coordinates.py"
+            ),
+        },
+        "data_manifest_binding": prepared_data_manifest_binding(cfg["protocol"]),
         "projection_seed": 20260713,
         "residual_projection_seed": 20260714,
-        "stage_a_checkpoint": str(args.stage_a_checkpoint),
+        "direction_projection_matrix": builder.P.detach().cpu().tolist(),
+        "residual_projection_matrix": builder.Pr.detach().cpu().tolist(),
+        "stage_a_checkpoint": str(args.stage_a_checkpoint.resolve()),
         "stage_a_checkpoint_sha256": file_sha256(args.stage_a_checkpoint),
-        "split_manifest": cfg["split_manifest"],
+        "split_manifest": str(Path(cfg["split_manifest"]).resolve()),
         "split_manifest_sha256": file_sha256(Path(cfg["split_manifest"])),
         "sample_policy": "SHA256-ranked unique train samples, fixed crop RNG",
         "sample_counts": sample_counts,
+        "sample_identity_records": sample_records,
+        "sample_identity_record_count": len(sample_records),
+        "sample_identity_sha256": canonical_sha256(sample_records),
         "pixels_per_scale": args.pixels_per_scale,
         "vnorm_observations": int(vnorm.numel()),
         "vnorm_excluded_fraction": float((vnorm <= floor_v).float().mean()),
@@ -241,6 +291,8 @@ def main():
         "pca_observations": pca_observations,
         "pca_direction_matrix": pca_projection.tolist(),
         "pca_direction_mean": pca_mean.tolist(),
+        "q_observations": int(torch.cat(q_values).numel()),
+        "w_dir_observations": int(torch.cat(w_values).numel()),
         "q_quantiles": [float(x) for x in torch.quantile(torch.cat(q_values), torch.tensor([0.01, 0.1, 0.5, 0.9, 0.99]))],
         "w_dir_quantiles": [float(x) for x in torch.quantile(torch.cat(w_values), torch.tensor([0.01, 0.1, 0.5, 0.9, 0.99]))],
         "normalization": normalization,

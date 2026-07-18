@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,9 +17,54 @@ def _candidate(candidate_id, model, checkpoint, output):
     }
 
 
+def _write_shared_marker(root: Path) -> None:
+    directory = root / "artifacts/manifests"
+    directory.mkdir(parents=True, exist_ok=True)
+    bindings = {}
+    for protocol, filename in eval_locked.STAGE_B_TERMINAL_ATTESTATION_NAMES.items():
+        path = directory / filename
+        terminal = {
+            "protocol": protocol,
+            "stage": "STAGE_B_COMPLETE",
+            "predicted_go": True,
+            "scientific_go": "GO",
+            "capacity_robustness_go": True if protocol == "aio3" else None,
+            "decision_revision_sha256": "c" * 64,
+        }
+        eval_locked.atomic_write_json(path, {
+            "schema_version": eval_locked.SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+            "status": "FROZEN",
+            "protocol": protocol,
+            "stage": "STAGE_B_COMPLETE",
+            "predicted_go": True,
+            "scientific_go": "GO",
+            "stage_b_runtime_manifest_sha256": "a" * 64,
+            "terminal_decision": terminal,
+            "terminal_decision_sha256": hashlib.sha256(json.dumps(
+                terminal, sort_keys=True, separators=(",", ":")
+            ).encode()).hexdigest(),
+            "decision_revision_sha256": "c" * 64,
+            "capacity_robustness_go": True if protocol == "aio3" else None,
+            "official_access_authorized": True,
+        })
+        bindings[protocol] = {
+            "path": str(path.resolve()),
+            "sha256": eval_locked.sha256_file(path),
+        }
+    marker = directory / eval_locked.SHARED_STAGE_B_MARKER_NAME
+    eval_locked.atomic_write_json(marker, {
+        "schema_version": eval_locked.SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+        "status": "FROZEN",
+        "marker_path": str(marker.resolve()),
+        "protocols": bindings,
+        "official_access_authorized": True,
+    })
+
+
 def _frozen_inputs(tmp_path: Path, monkeypatch, checkpoint_specs):
     monkeypatch.setattr(orchestrate, "ROOT", tmp_path)
     monkeypatch.setattr(eval_locked, "ROOT", tmp_path)
+    _write_shared_marker(tmp_path)
     stats = tmp_path / "coordinate_stats.json"
     stats.write_text('{"frozen": true}\n')
     config = tmp_path / "stage_c_aio3.yaml"
@@ -28,7 +74,7 @@ def _frozen_inputs(tmp_path: Path, monkeypatch, checkpoint_specs):
     )
     config_sha = eval_locked.sha256_file(config)
     data_manifest = tmp_path / "artifacts/manifests/official_dataset_aio3.json"
-    data_manifest.parent.mkdir(parents=True)
+    data_manifest.parent.mkdir(parents=True, exist_ok=True)
     data_manifest.write_text('{"frozen": true}\n')
     code_contract = {"tests/eval.py": "e" * 64}
     monkeypatch.setattr(

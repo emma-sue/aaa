@@ -26,13 +26,16 @@ from scripts import train_stage_a_capacity_hybrid_ddp as capacity_hybrid_ddp
 from scripts.eval_locked import (
     EXPECTED_TASKS,
     OFFICIAL_MANIFEST_SCHEMA_VERSION,
+    SHARED_STAGE_B_MARKER_NAME,
+    SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+    STAGE_B_TERMINAL_ATTESTATION_NAMES,
     freeze_official_data_manifest,
     official_artifacts_complete,
     official_evaluation_code_hashes,
+    validate_shared_stage_b_terminal_marker,
 )
 from scripts.runtime_accounting import read_runtime_sidecar
 from scripts.stage_b_runtime import (
-    REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG,
     StageBRuntimeBundle,
     assert_no_runtime_worker_override,
     assert_stage_b_cublas_environment,
@@ -254,6 +257,27 @@ def _read_named_sha256_sidecar(path: Path, expected_name: str) -> str:
     if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
         raise ValueError(f"invalid SHA256 digest in sidecar: {path}")
     return digest
+
+
+def data_manifest_binding(protocol: str) -> dict:
+    """Hash the prepared-data/list ledger without scanning image bytes."""
+    path = ROOT / "artifacts/manifests" / f"{protocol}.json"
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    payload = json.loads(path.read_text())
+    list_sha = payload.get("list_sha256")
+    if (
+        payload.get("protocol") != protocol
+        or not isinstance(list_sha, dict)
+        or not list_sha
+        or any(not _diagnostic_sha256(value) for value in list_sha.values())
+    ):
+        raise RuntimeError(f"invalid prepared-data manifest binding: {path}")
+    return {
+        "path": str(path.resolve()),
+        "sha256": _sha256_file(path),
+        "list_sha256": dict(sorted(list_sha.items())),
+    }
 
 
 def _schema_complete_decision(decision: dict) -> dict:
@@ -509,6 +533,99 @@ def local_composite_artifacts_complete(
         return False
 
 
+def freeze_stage_b_terminal_attestation(
+    protocol: str, decision: dict, decision_path: Path,
+) -> Path | None:
+    """Freeze one terminal Stage-B revision and atomically join AIO3+AIO5."""
+    if protocol not in STAGE_B_TERMINAL_ATTESTATION_NAMES:
+        raise ValueError(f"unsupported Stage-B terminal protocol: {protocol!r}")
+    decision_path = Path(decision_path).resolve()
+    if not decision_path.is_file():
+        raise FileNotFoundError(decision_path)
+    stored = json.loads(decision_path.read_text())
+    if stored != decision:
+        raise RuntimeError("Stage-B terminal decision was not atomically persisted")
+    runtime = stored.get("stage_b_runtime") or {}
+    scientific_status = stored.get("scientific_go")
+    capacity_go = stored.get("capacity_robustness_go")
+    official_authorized = (
+        stored.get("stage") == "STAGE_B_COMPLETE"
+        and stored.get("predicted_go") is True
+        and scientific_status == "GO"
+        and (protocol != "aio3" or capacity_go is True)
+    )
+    payload = {
+        "schema_version": SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+        "status": "FROZEN",
+        "protocol": protocol,
+        "stage": stored.get("stage"),
+        "oracle_go": stored.get("oracle_go"),
+        "predicted_go": stored.get("predicted_go"),
+        "scientific_go": scientific_status,
+        "capacity_robustness_go": capacity_go,
+        "selected_model": stored.get("selected_model"),
+        "stage_b_runtime_manifest_sha256": runtime.get("manifest_sha256"),
+        "terminal_decision_path": str(decision_path),
+        "terminal_decision": stored,
+        "terminal_decision_sha256": _canonical_json_sha256(stored),
+        "decision_revision_sha256": stored.get("decision_revision_sha256"),
+        "official_access_authorized": official_authorized,
+    }
+    attestation = (
+        ROOT / "artifacts/manifests"
+        / STAGE_B_TERMINAL_ATTESTATION_NAMES[protocol]
+    )
+    if attestation.is_file():
+        existing = json.loads(attestation.read_text())
+        stable_keys = (
+            "schema_version", "status", "protocol", "stage", "oracle_go",
+            "predicted_go", "scientific_go", "capacity_robustness_go",
+            "selected_model", "stage_b_runtime_manifest_sha256",
+            "official_access_authorized",
+        )
+        if any(existing.get(key) != payload.get(key) for key in stable_keys):
+            raise RuntimeError(
+                f"frozen Stage-B terminal attestation drift for {protocol}"
+            )
+    else:
+        _atomic_write_text(
+            attestation, json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        )
+
+    manifest_dir = ROOT / "artifacts/manifests"
+    protocol_bindings = {}
+    authorizations = []
+    for name, filename in STAGE_B_TERMINAL_ATTESTATION_NAMES.items():
+        path = manifest_dir / filename
+        if not path.is_file():
+            return None
+        frozen = json.loads(path.read_text())
+        protocol_bindings[name] = {
+            "path": str(path.resolve()),
+            "sha256": _sha256_file(path),
+        }
+        authorizations.append(frozen.get("official_access_authorized") is True)
+    marker = manifest_dir / SHARED_STAGE_B_MARKER_NAME
+    marker_payload = {
+        "schema_version": SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+        "status": "FROZEN",
+        "marker_path": str(marker.resolve()),
+        "protocols": protocol_bindings,
+        "official_access_authorized": all(authorizations),
+    }
+    if marker.is_file():
+        if json.loads(marker.read_text()) != marker_payload:
+            raise RuntimeError("shared Stage-B terminal marker drift")
+    else:
+        _atomic_write_text(
+            marker, json.dumps(marker_payload, indent=2, sort_keys=True) + "\n"
+        )
+    validate_shared_stage_b_terminal_marker(
+        ROOT, require_official_authorization=False
+    )
+    return marker
+
+
 def freeze_official_candidate_manifest(
     protocol: str,
     config_path: Path,
@@ -520,6 +637,7 @@ def freeze_official_candidate_manifest(
     the same.  A different checkpoint, output path, model kind, or config must
     use a new preregistered protocol run rather than mutate this manifest.
     """
+    validate_shared_stage_b_terminal_marker(ROOT)
     config_path = Path(config_path).resolve()
     if not config_path.is_file():
         raise FileNotFoundError(config_path)
@@ -934,7 +1052,7 @@ def feedback_diagnostics_complete(
         return True
     except (
         OSError, KeyError, TypeError, ValueError, OverflowError,
-        json.JSONDecodeError, yaml.YAMLError,
+        RuntimeError, json.JSONDecodeError, yaml.YAMLError,
     ):
         return False
 
@@ -1035,13 +1153,17 @@ def review_contract(
         raise RuntimeError(f"implementation contract lost required tokens: {missing}")
     out = ROOT / "artifacts/manifests" / f"contract_review_{phase}.json"
     protocol = phase.split("_", 1)[0] if phase.startswith(("aio3_", "aio5_")) else None
+    data_binding = data_manifest_binding(protocol) if protocol else None
     canonical = (
         ROOT / "artifacts/manifests" / f"contract_review_{protocol}_before_stage_b.json"
         if protocol else None
     )
     if phase.endswith("_before_stage_b") and out.is_file():
         frozen = json.loads(out.read_text())
-        if frozen.get("sha256") != hashes:
+        if (
+            frozen.get("sha256") != hashes
+            or frozen.get("data_manifest_binding") != data_binding
+        ):
             raise RuntimeError(
                 "Stage-B canonical contract drift; archive all affected arms and "
                 "create a new preregistered run family"
@@ -1050,13 +1172,21 @@ def review_contract(
         return
     if canonical is not None and canonical.is_file() and phase != f"{protocol}_startup":
         frozen = json.loads(canonical.read_text())
-        if frozen.get("sha256") != hashes:
+        if (
+            frozen.get("sha256") != hashes
+            or frozen.get("data_manifest_binding") != data_binding
+        ):
             raise RuntimeError(
                 f"pipeline contract drift since `{canonical}`; refusing mixed-code gates"
             )
     temporary = out.with_suffix(out.suffix + f".tmp.{os.getpid()}")
     temporary.write_text(
-        json.dumps({"phase": phase, "time": utc(), "sha256": hashes}, indent=2) + "\n"
+        json.dumps({
+            "phase": phase,
+            "time": utc(),
+            "sha256": hashes,
+            "data_manifest_binding": data_binding,
+        }, indent=2) + "\n"
     )
     os.replace(temporary, out)
     note(f"CONTRACT_REVIEW phase={phase} manifest=`{out}`")
@@ -1142,6 +1272,9 @@ def _run_cache_expectation(
             "effective_config": effective_config,
             "config_sha256": _sha256_file(config),
             "split_manifest_sha256": _sha256_file(split),
+            "data_manifest_binding": data_manifest_binding(
+                effective_config["protocol"]
+            ),
             "source_init_path": str(source) if source is not None else None,
             "source_init_sha256": (
                 _sha256_file(source) if source is not None else None
@@ -1360,6 +1493,64 @@ def ensure_stage_a_locked_val_cache(
     return manifest_path
 
 
+def _canonical_json_sha256(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _all_numeric_values_finite(value: object) -> bool:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return True
+    if isinstance(value, (int, float)):
+        return math.isfinite(float(value))
+    if isinstance(value, list):
+        return all(_all_numeric_values_finite(item) for item in value)
+    if isinstance(value, dict):
+        return all(_all_numeric_values_finite(item) for item in value.values())
+    return False
+
+
+def _orthogonal_projection(rows: int, cols: int, seed: int) -> torch.Tensor:
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+    q, _ = torch.linalg.qr(
+        torch.randn(cols, rows, generator=generator), mode="reduced"
+    )
+    return q.transpose(0, 1).contiguous()
+
+
+def _valid_row_orthonormal_matrix(
+    value: object, rows: int, cols: int, *, expected: torch.Tensor | None = None,
+) -> bool:
+    try:
+        matrix = torch.as_tensor(value, dtype=torch.float64)
+    except (TypeError, ValueError):
+        return False
+    if matrix.shape != (rows, cols) or not torch.isfinite(matrix).all():
+        return False
+    identity = torch.eye(rows, dtype=torch.float64)
+    if not torch.allclose(matrix @ matrix.T, identity, atol=1e-4, rtol=1e-4):
+        return False
+    return expected is None or torch.allclose(
+        matrix, expected.to(torch.float64), atol=1e-7, rtol=1e-7
+    )
+
+
+def _nondegenerate_unit_quantiles(value: object) -> bool:
+    try:
+        quantiles = [float(item) for item in value]
+    except (TypeError, ValueError):
+        return False
+    return (
+        len(quantiles) == 5
+        and all(math.isfinite(item) and 0.0 <= item <= 1.0 for item in quantiles)
+        and quantiles == sorted(quantiles)
+        and quantiles[1] < 1.0 - 1e-6
+        and quantiles[3] > 1e-6
+        and quantiles[3] - quantiles[1] > 1e-6
+    )
+
+
 def coordinate_stats_complete(config: Path, stage_a: Path) -> bool:
     """Fail-closed provenance and shape check for frozen SRSC statistics."""
     try:
@@ -1370,18 +1561,78 @@ def coordinate_stats_complete(config: Path, stage_a: Path) -> bool:
         checkpoint_sha = _sha256_file(stage_a)
         modes = ("O1", "O2", "O3", "O4", "O5", "O6", "O7", "O12", "O13", "O15")
         normalization = payload["normalization"]
+        sample_records = payload["sample_identity_records"]
+        sample_counts = payload["sample_counts"]
+        counted = {}
+        for record in sample_records:
+            task = str(record["task"])
+            counted[task] = counted.get(task, 0) + 1
+            if (
+                int(record["index"]) < 0
+                or str(Path(record["degraded"]).resolve()) != record["degraded"]
+                or str(Path(record["clean"]).resolve()) != record["clean"]
+                or not isinstance(record["sigma"], int)
+            ):
+                return False
+        producer = payload["producer_sha256"]
+        expected_producer = {
+            "scripts/compute_coordinate_stats.py": _sha256_file(
+                ROOT / "scripts/compute_coordinate_stats.py"
+            ),
+            "src/net/srsc_coordinates.py": _sha256_file(
+                ROOT / "src/net/srsc_coordinates.py"
+            ),
+        }
+        expected_p = _orthogonal_projection(6, 81, 20260713)
+        expected_pr = _orthogonal_projection(8, 81, 20260714)
         if not (
-            payload.get("protocol") == cfg["protocol"]
+            payload.get("schema_version") == 2
+            and payload.get("protocol") == cfg["protocol"]
             and int(payload.get("seed", -1)) == int(cfg["seed"])
+            and payload.get("config_path") == str(config.resolve())
+            and payload.get("config_sha256") == _sha256_file(config)
+            and producer == expected_producer
+            and payload.get("data_manifest_binding")
+            == data_manifest_binding(cfg["protocol"])
+            and payload.get("stage_a_checkpoint") == str(stage_a.resolve())
             and payload.get("stage_a_checkpoint_sha256") == checkpoint_sha
+            and payload.get("split_manifest")
+            == str(Path(cfg["split_manifest"]).resolve())
             and payload.get("split_manifest_sha256") == split_sha
+            and payload.get("projection_seed") == 20260713
+            and payload.get("residual_projection_seed") == 20260714
             and math.isfinite(float(payload["tau_v"]))
             and math.isfinite(float(payload["tau_e"]))
             and float(payload["tau_v"]) >= 1e-4
             and float(payload["tau_e"]) >= 1e-4
-            and len(payload["pca_direction_matrix"]) == 6
-            and all(len(row) == 81 for row in payload["pca_direction_matrix"])
+            and _valid_row_orthonormal_matrix(
+                payload["direction_projection_matrix"], 6, 81,
+                expected=expected_p,
+            )
+            and _valid_row_orthonormal_matrix(
+                payload["residual_projection_matrix"], 8, 81,
+                expected=expected_pr,
+            )
+            and _valid_row_orthonormal_matrix(
+                payload["pca_direction_matrix"], 6, 81
+            )
             and len(payload["pca_direction_mean"]) == 81
+            and all(
+                math.isfinite(float(value))
+                for value in payload["pca_direction_mean"]
+            )
+            and isinstance(sample_records, list)
+            and bool(sample_records)
+            and int(payload["sample_identity_record_count"]) == len(sample_records)
+            and payload["sample_identity_sha256"]
+            == _canonical_json_sha256(sample_records)
+            and {str(key): int(value) for key, value in sample_counts.items()}
+            == counted
+            and int(payload["q_observations"]) > 0
+            and int(payload["w_dir_observations"]) > 0
+            and _nondegenerate_unit_quantiles(payload["q_quantiles"])
+            and _nondegenerate_unit_quantiles(payload["w_dir_quantiles"])
+            and _all_numeric_values_finite(payload)
             and set(normalization) == set(modes)
         ):
             return False
@@ -1397,7 +1648,7 @@ def coordinate_stats_complete(config: Path, stage_a: Path) -> bool:
         return True
     except (
         OSError, KeyError, TypeError, ValueError, OverflowError,
-        json.JSONDecodeError, yaml.YAMLError,
+        RuntimeError, json.JSONDecodeError, yaml.YAMLError,
     ):
         return False
 
@@ -1589,7 +1840,7 @@ def run_independent_arms(jobs: list[tuple[list[str], str]]):
 
 
 def assert_matching_replay_digests(run_names: list[str]) -> None:
-    """Prove paired arms consumed the same ordered raw sample identities."""
+    """Prove paired arms consumed the complete same epoch/update/sample set."""
     if len(run_names) < 2:
         return
     root = ROOT / "artifacts/manifests/replay_digests"
@@ -1598,19 +1849,70 @@ def assert_matching_replay_digests(run_names: list[str]) -> None:
     for run_name in run_names:
         directory = root / run_name
         files = sorted(directory.glob("epoch*.json")) if directory.is_dir() else []
-        if not files:
+        contract_path = ROOT / "artifacts/checkpoints" / run_name / "run_contract.json"
+        if not files or not contract_path.is_file():
             raise RuntimeError(f"missing formal replay digests for {run_name}")
+        contract = json.loads(contract_path.read_text())
+        effective = contract.get("effective_config") or {}
+        expected_epochs = int(effective.get("epochs", 0))
+        effective_batch = int(effective.get("effective_batch", 0))
+        micro_batch = int(effective.get("micro_batch", 0))
+        accumulation = int(effective.get("accumulation", 0))
+        expected_names = [
+            f"epoch{epoch:03d}.json" for epoch in range(1, expected_epochs + 1)
+        ]
+        if (
+            expected_epochs <= 0
+            or effective_batch <= 0
+            or micro_batch <= 0
+            or accumulation <= 0
+            or micro_batch * accumulation != effective_batch
+            or [path.name for path in files] != expected_names
+        ):
+            raise RuntimeError(
+                f"incomplete formal replay epoch set for {run_name}: "
+                f"expected={expected_names} actual={[path.name for path in files]}"
+            )
         rows = []
-        for path in files:
+        steps_per_epoch = None
+        samples_per_epoch = None
+        for expected_epoch, path in enumerate(files, 1):
             payload = json.loads(path.read_text())
-            rows.append({
+            row = {
                 key: payload[key]
                 for key in (
                     "epoch", "optimizer_step_end", "sample_count",
                     "ordered_sample_identity_sha256", "protocol", "seed",
                     "split_manifest_sha256",
                 )
-            })
+            }
+            sample_count = int(row["sample_count"])
+            optimizer_step_end = int(row["optimizer_step_end"])
+            current_steps = sample_count // effective_batch
+            if steps_per_epoch is None:
+                steps_per_epoch = current_steps
+                samples_per_epoch = sample_count
+            valid = all((
+                payload.get("schema") == 1,
+                payload.get("run_name") == run_name,
+                int(row["epoch"]) == expected_epoch,
+                sample_count > 0,
+                sample_count % effective_batch == 0,
+                current_steps == steps_per_epoch and current_steps > 0,
+                sample_count == samples_per_epoch,
+                optimizer_step_end == expected_epoch * steps_per_epoch,
+                row["protocol"] == effective.get("protocol"),
+                int(row["seed"]) == int(effective.get("seed", -1)),
+                row["split_manifest_sha256"]
+                == contract.get("split_manifest_sha256"),
+                _diagnostic_sha256(row["split_manifest_sha256"]),
+                _diagnostic_sha256(row["ordered_sample_identity_sha256"]),
+            ))
+            if not valid:
+                raise RuntimeError(
+                    f"invalid formal replay epoch/update/sample record: {path}"
+                )
+            rows.append(row)
         if canonical is None:
             canonical, canonical_name = rows, run_name
         elif rows != canonical:
@@ -1751,6 +2053,9 @@ def pilot_complete(
         if len(selected_rows) != 1:
             return False
         selected = selected_rows[0]
+        verify_locked_metric_record(
+            selected, expectation["contract"]["effective_config"]["protocol"]
+        )
         if target.is_file() != marker.is_file():
             return False
         candidate = target if target.is_file() else run_dir / "last.pt"
@@ -1800,7 +2105,7 @@ def pilot_complete(
         )
     except (
         OSError, KeyError, TypeError, ValueError, OverflowError,
-        json.JSONDecodeError, yaml.YAMLError,
+        RuntimeError, json.JSONDecodeError, yaml.YAMLError,
     ):
         return False
 
@@ -1810,7 +2115,9 @@ def last_metric(run_name: str):
     if not path.is_file():
         raise FileNotFoundError(path)
     lines = [line for line in path.read_text().splitlines() if line.strip()]
-    return json.loads(lines[-1])
+    metric = json.loads(lines[-1])
+    verify_locked_metric_record(metric)
+    return metric
 
 
 def best_metric(run_name: str):
@@ -1821,6 +2128,8 @@ def best_metric(run_name: str):
     records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     if not records:
         raise RuntimeError(f"empty locked validation file: {path}")
+    for record in records:
+        verify_locked_metric_record(record)
     return max(records, key=lambda item: item["macro_psnr"])
 
 
@@ -1830,11 +2139,92 @@ def verified_paired_rows(metric: dict) -> Path:
     if not path_value or not expected_sha:
         raise RuntimeError("selected locked-val metric lacks paired-row provenance")
     path = Path(path_value)
+    if not path.is_absolute() or str(path) != str(path.resolve()):
+        raise RuntimeError("paired locked-val CSV path is not absolute/canonical")
     if not path.is_file():
         raise FileNotFoundError(path)
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    if actual != expected_sha:
+    if not _diagnostic_sha256(expected_sha) or actual != expected_sha:
         raise RuntimeError(f"paired locked-val CSV hash drift: {path}")
+    return path
+
+
+def _infer_locked_metric_protocol(metric: dict) -> str:
+    candidates = [
+        protocol
+        for protocol, tasks in EXPECTED_TASKS.items()
+        if set(tasks).issubset(metric)
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError("cannot infer one locked-validation protocol from metric")
+    return candidates[0]
+
+
+def verify_locked_metric_record(metric: dict, protocol: str | None = None) -> Path:
+    """Recompute every selection scalar from the hash-bound paired CSV."""
+    protocol = protocol or _infer_locked_metric_protocol(metric)
+    if protocol not in EXPECTED_TASKS:
+        raise RuntimeError(f"unsupported locked-validation protocol: {protocol!r}")
+    path = verified_paired_rows(metric)
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or not {
+            "task", "name", "psnr", "ssim"
+        }.issubset(reader.fieldnames):
+            raise RuntimeError(f"invalid paired locked-val CSV schema: {path}")
+        rows = list(reader)
+    if not rows:
+        raise RuntimeError(f"empty paired locked-val CSV: {path}")
+    seen = set()
+    psnr_by_task = {task: [] for task in EXPECTED_TASKS[protocol]}
+    ssim_by_task = {task: [] for task in EXPECTED_TASKS[protocol]}
+    for row in rows:
+        key = (str(row["task"]), str(row["name"]))
+        if key in seen or key[0] not in psnr_by_task:
+            raise RuntimeError(f"invalid/duplicate paired locked-val key: {key}")
+        seen.add(key)
+        psnr = float(row["psnr"])
+        ssim = float(row["ssim"])
+        if not math.isfinite(psnr) or not math.isfinite(ssim):
+            raise RuntimeError(f"non-finite paired locked-val row: {row}")
+        psnr_by_task[key[0]].append(psnr)
+        ssim_by_task[key[0]].append(ssim)
+    if any(not values for values in psnr_by_task.values()):
+        raise RuntimeError("paired locked-val CSV does not cover every setting")
+    recomputed_psnr = {
+        task: statistics.fmean(values) for task, values in psnr_by_task.items()
+    }
+    recomputed_ssim = {
+        task: statistics.fmean(values) for task, values in ssim_by_task.items()
+    }
+    recomputed_macro = statistics.fmean(recomputed_psnr.values())
+    recomputed_macro_ssim = statistics.fmean(recomputed_ssim.values())
+
+    def require_close(actual: object, expected: float, label: str) -> None:
+        value = float(actual)
+        if not math.isfinite(value) or not math.isclose(
+            value, expected, rel_tol=1e-12, abs_tol=1e-9
+        ):
+            raise RuntimeError(
+                f"locked-val summary/paired CSV mismatch for {label}: "
+                f"{value!r} != {expected!r}"
+            )
+
+    for task in EXPECTED_TASKS[protocol]:
+        require_close(metric[task], recomputed_psnr[task], task)
+    require_close(metric["macro_psnr"], recomputed_macro, "macro_psnr")
+    setting_ssim = metric.get("setting_ssim")
+    if not isinstance(setting_ssim, dict) or set(setting_ssim) != set(
+        EXPECTED_TASKS[protocol]
+    ):
+        raise RuntimeError("locked-val summary has an invalid SSIM task set")
+    for task in EXPECTED_TASKS[protocol]:
+        require_close(setting_ssim[task], recomputed_ssim[task], f"SSIM/{task}")
+    require_close(
+        metric["five_setting_mean_ssim"],
+        recomputed_macro_ssim,
+        "five_setting_mean_ssim",
+    )
     return path
 
 
@@ -1884,7 +2274,9 @@ def best_checkpoint(run_name: str) -> Path:
     return path
 
 
-def _formal_selection(run_name: str, epochs: int) -> dict | None:
+def _formal_selection(
+    run_name: str, epochs: int, protocol: str | None = None,
+) -> dict | None:
     """Validate that top3[0] is exactly the locked-validation-selected row."""
     metrics = ROOT / "artifacts/metrics" / f"{run_name}_locked_val.jsonl"
     top3 = ROOT / "artifacts/checkpoints" / run_name / "top3.json"
@@ -1900,6 +2292,7 @@ def _formal_selection(run_name: str, epochs: int) -> dict | None:
             return None
         metric_by_boundary = {}
         for row in rows:
+            verify_locked_metric_record(row, protocol)
             boundary = (int(row["epoch"]), int(row["step"]))
             score = float(row["macro_psnr"])
             if boundary in metric_by_boundary or not math.isfinite(score):
@@ -1942,7 +2335,7 @@ def _formal_selection(run_name: str, epochs: int) -> dict | None:
         }
     except (
         OSError, KeyError, TypeError, ValueError, OverflowError,
-        json.JSONDecodeError,
+        RuntimeError, json.JSONDecodeError,
     ):
         return None
 
@@ -2378,7 +2771,11 @@ def formal_complete(
     run_dir = ROOT / "artifacts/checkpoints" / run_name
     marker = run_dir / "formal_complete.json"
     compact = run_dir / "formal_best_model.pt"
-    selection = _formal_selection(run_name, epochs)
+    try:
+        selection_protocol = yaml.safe_load(Path(config).read_text())["protocol"]
+    except (OSError, KeyError, TypeError, yaml.YAMLError):
+        return False
+    selection = _formal_selection(run_name, epochs, selection_protocol)
     expectation = _run_cache_expectation(
         run_name=run_name, config=config, stage=stage, feedback=feedback,
         init=init, max_steps=0, seed_override=seed_override, epochs=epochs,
@@ -3869,31 +4266,74 @@ def main():
         # result caused only by the deliberately coarse 6-block D1.  This is
         # conditional on the complete main Stage-B passing and therefore does
         # not consume compute for a rejected representation.
+        capacity_passed = True
         if args.protocol == "aio3":
-            run_aio3_capacity_robustness(
+            capacity_passed = run_aio3_capacity_robustness(
                 decision, decision_path, runtime_bundle
             )
 
         if args.stop_after_stage_b:
+            scientific_status = (
+                "GO" if capacity_passed else "GO_CAPACITY_SENSITIVE"
+            )
             decision.update({
                 "stage": "STAGE_B_COMPLETE",
-                "scientific_go": "GO",
-                "publication_go": "INCOMPLETE",
-                "blocking_issues": [
-                    "Stage-C matched controls and joint fine-tuning have not completed"
-                ],
+                "scientific_go": scientific_status,
+                "publication_go": "INCOMPLETE" if capacity_passed else "NO_GO",
+                "capacity_generalization_status": (
+                    "GO" if capacity_passed else "GO_CAPACITY_SENSITIVE"
+                ),
+                "blocking_issues": (
+                    ["Stage-C matched controls and joint fine-tuning have not completed"]
+                    if capacity_passed else
+                    [
+                        "10/10 capacity split failed P7>P6 and P7>P12; the "
+                        "6/14 result is capacity-sensitive and cannot authorize "
+                        "a general restoration-state claim or official evaluation"
+                    ]
+                ),
                 "next_command": (
                     "freeze the second protocol Stage-B contract before either "
                     "protocol reads official test, then resume Stage-C"
+                    if capacity_passed else
+                    "freeze the capacity-sensitive terminal result and stop AIO3 "
+                    "before Stage-C/official evaluation"
                 ),
             })
             persist_decision(decision, decision_path)
+            freeze_stage_b_terminal_attestation(
+                args.protocol, decision, decision_path
+            )
             note(
-                f"STAGE-B COMPLETE protocol={args.protocol}; stopped before Stage-C "
-                "and official test by preregistered sequencing flag"
+                f"STAGE-B COMPLETE protocol={args.protocol} "
+                f"status={scientific_status}; stopped before Stage-C and official "
+                "test by preregistered sequencing flag"
             )
             refresh_metrics_long(args.protocol, "stage_b_complete")
             return 0
+
+        if not capacity_passed:
+            decision.update({
+                "stage": "STAGE_B_COMPLETE",
+                "scientific_go": "GO_CAPACITY_SENSITIVE",
+                "publication_go": "NO_GO",
+                "capacity_generalization_status": "GO_CAPACITY_SENSITIVE",
+                "blocking_issues": [
+                    "10/10 capacity split failed P7>P6 and P7>P12; Stage-C and "
+                    "official evaluation are blocked for the 6/14-only claim"
+                ],
+                "next_command": (
+                    "report the capacity-sensitive Stage-B result; do not claim "
+                    "general restoration-state superiority"
+                ),
+            })
+            persist_decision(decision, decision_path)
+            freeze_stage_b_terminal_attestation(
+                args.protocol, decision, decision_path
+            )
+            note("CAPACITY-SENSITIVE NO-GO: Stage-C and official test remain sealed")
+            refresh_metrics_long(args.protocol, "capacity_sensitive_no_go")
+            return 4
 
         # Only after the information and learnability gates pass, train the
         # expensive clean single-stage controls independently from scratch.

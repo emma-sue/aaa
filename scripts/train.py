@@ -104,6 +104,32 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+def data_manifest_binding(protocol: str) -> dict:
+    """Bind the small prepared-data ledger without scanning training images."""
+    path = ROOT / "artifacts/manifests" / f"{protocol}.json"
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    payload = json.loads(path.read_text())
+    list_sha = payload.get("list_sha256")
+    if (
+        payload.get("protocol") != protocol
+        or not isinstance(list_sha, dict)
+        or not list_sha
+        or any(
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+            for value in list_sha.values()
+        )
+    ):
+        raise RuntimeError(f"invalid prepared-data manifest binding: {path}")
+    return {
+        "path": str(path.resolve()),
+        "sha256": sha256_file(path),
+        "list_sha256": dict(sorted(list_sha.items())),
+    }
+
+
 def update_replay_digest(digest, batch: dict) -> int:
     """Bind the exact ordered raw sample identities consumed by one batch."""
     indices = batch.get("sample_index")
@@ -229,6 +255,7 @@ def ensure_run_contract(run_dir: Path, cfg: dict, args):
         "split_manifest_sha256": hashlib.sha256(
             Path(cfg["split_manifest"]).read_bytes()
         ).hexdigest(),
+        "data_manifest_binding": data_manifest_binding(cfg["protocol"]),
         "source_init_path": args.source_init_path,
         "source_init_sha256": args.source_init_sha256,
         "coordinate_stats_sha256": (

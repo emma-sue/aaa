@@ -372,6 +372,18 @@ def test_formal_compaction_preserves_locked_val_best_model_and_provenance(tmp_pa
     metric_dir = tmp_path / "artifacts" / "metrics"
     run_dir.mkdir(parents=True)
     metric_dir.mkdir(parents=True)
+    data_manifest = tmp_path / "artifacts/manifests/aio3.json"
+    data_manifest.parent.mkdir(parents=True, exist_ok=True)
+    data_manifest.write_text(json.dumps({
+        "protocol": "aio3",
+        "list_sha256": {"train.txt": "d" * 64},
+    }) + "\n")
+    data_binding = {
+        "path": str(data_manifest.resolve()),
+        "sha256": hashlib.sha256(data_manifest.read_bytes()).hexdigest(),
+        "list_sha256": {"train.txt": "d" * 64},
+    }
+    monkeypatch.setattr(trainer, "data_manifest_binding", lambda _protocol: data_binding)
     split = tmp_path / "split.json"
     stats = tmp_path / "stats.json"
     source = tmp_path / "stage_a.pt"
@@ -434,9 +446,32 @@ def test_formal_compaction_preserves_locked_val_best_model_and_provenance(tmp_pa
         {"score": 31.0, "epoch": 30, "step": 300, "checkpoint": "val_epoch030_step0000300.pt"},
         {"score": 29.0, "epoch": 28, "step": 280, "checkpoint": "val_epoch028_step0000280.pt"},
     ]))
+    tasks = ("dehaze", "derain", "denoise15", "denoise25", "denoise50")
+
+    def locked_row(epoch, step, score):
+        paired = (
+            metric_dir / "locked_rows" / run_name
+            / f"epoch{epoch:03d}_step{step:07d}.csv"
+        )
+        paired.parent.mkdir(parents=True, exist_ok=True)
+        paired.write_text(
+            "task,name,psnr,ssim\n"
+            + "".join(f"{task},{task}.png,{score},0.9\n" for task in tasks)
+        )
+        return {
+            **{task: score for task in tasks},
+            "macro_psnr": score,
+            "setting_ssim": {task: 0.9 for task in tasks},
+            "five_setting_mean_ssim": 0.9,
+            "epoch": epoch,
+            "step": step,
+            "paired_rows_path": str(paired.resolve()),
+            "paired_rows_sha256": hashlib.sha256(paired.read_bytes()).hexdigest(),
+        }
+
     (metric_dir / f"{run_name}_locked_val.jsonl").write_text(
-        json.dumps({"macro_psnr": 29.0, "epoch": 28, "step": 280}) + "\n"
-        + json.dumps({"macro_psnr": 31.0, "epoch": 30, "step": 300}) + "\n"
+        json.dumps(locked_row(28, 280, 29.0)) + "\n"
+        + json.dumps(locked_row(30, 300, 31.0)) + "\n"
     )
 
     cache_kwargs = {
@@ -575,15 +610,53 @@ def test_coordinate_stats_completion_is_checkpoint_bound_and_fail_closed(tmp_pat
         "coordinate_stats": str(stats),
     }))
     modes = ("O1", "O2", "O3", "O4", "O5", "O6", "O7", "O12", "O13", "O15")
+    sample_records = [{
+        "index": 0,
+        "task": "denoise",
+        "degraded": str((tmp_path / "input.png").resolve()),
+        "clean": str((tmp_path / "clean.png").resolve()),
+        "sigma": 25,
+    }]
+    pca = torch.eye(81, dtype=torch.float32)[:6]
     payload = {
+        "schema_version": 2,
         "protocol": "aio3",
         "seed": 1415926,
+        "config_path": str(config.resolve()),
+        "config_sha256": hashlib.sha256(config.read_bytes()).hexdigest(),
+        "producer_sha256": {
+            "scripts/compute_coordinate_stats.py": hashlib.sha256(
+                (ROOT / "scripts/compute_coordinate_stats.py").read_bytes()
+            ).hexdigest(),
+            "src/net/srsc_coordinates.py": hashlib.sha256(
+                (ROOT / "src/net/srsc_coordinates.py").read_bytes()
+            ).hexdigest(),
+        },
+        "data_manifest_binding": module.data_manifest_binding("aio3"),
+        "projection_seed": 20260713,
+        "residual_projection_seed": 20260714,
+        "direction_projection_matrix": module._orthogonal_projection(
+            6, 81, 20260713
+        ).tolist(),
+        "residual_projection_matrix": module._orthogonal_projection(
+            8, 81, 20260714
+        ).tolist(),
+        "stage_a_checkpoint": str(checkpoint.resolve()),
         "stage_a_checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        "split_manifest": str(split.resolve()),
         "split_manifest_sha256": hashlib.sha256(split.read_bytes()).hexdigest(),
         "tau_v": 0.01,
         "tau_e": 0.02,
-        "pca_direction_matrix": [[0.0] * 81 for _ in range(6)],
+        "pca_direction_matrix": pca.tolist(),
         "pca_direction_mean": [0.0] * 81,
+        "sample_counts": {"denoise": 1},
+        "sample_identity_records": sample_records,
+        "sample_identity_record_count": 1,
+        "sample_identity_sha256": module._canonical_json_sha256(sample_records),
+        "q_observations": 100,
+        "w_dir_observations": 100,
+        "q_quantiles": [0.0, 0.1, 0.5, 0.9, 1.0],
+        "w_dir_quantiles": [0.0, 0.1, 0.4, 0.8, 1.0],
         "normalization": {
             mode: {"center": [0.0] * 8, "scale": [1.0] * 8}
             for mode in modes
@@ -591,7 +664,28 @@ def test_coordinate_stats_completion_is_checkpoint_bound_and_fail_closed(tmp_pat
     }
     stats.write_text(json.dumps(payload) + "\n")
     assert module.coordinate_stats_complete(config, checkpoint)
+    valid_payload = json.loads(json.dumps(payload))
     payload["stage_a_checkpoint_sha256"] = "0" * 64
+    stats.write_text(json.dumps(payload) + "\n")
+    assert not module.coordinate_stats_complete(config, checkpoint)
+
+    payload = json.loads(json.dumps(valid_payload))
+    payload["direction_projection_matrix"][0] = [0.0] * 81
+    stats.write_text(json.dumps(payload) + "\n")
+    assert not module.coordinate_stats_complete(config, checkpoint)
+
+    payload = json.loads(json.dumps(valid_payload))
+    payload["q_quantiles"] = [1.0] * 5
+    stats.write_text(json.dumps(payload) + "\n")
+    assert not module.coordinate_stats_complete(config, checkpoint)
+
+    payload = json.loads(json.dumps(valid_payload))
+    payload["sample_identity_sha256"] = "0" * 64
+    stats.write_text(json.dumps(payload) + "\n")
+    assert not module.coordinate_stats_complete(config, checkpoint)
+
+    payload = json.loads(json.dumps(valid_payload))
+    payload["producer_sha256"]["scripts/compute_coordinate_stats.py"] = "0" * 64
     stats.write_text(json.dumps(payload) + "\n")
     assert not module.coordinate_stats_complete(config, checkpoint)
 

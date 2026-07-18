@@ -188,3 +188,40 @@ https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0155-s0233005
 To https://github.com/emma-sue/aaa.git
    332a178..af0a28d  main -> main
 [2026-07-18T15:00:40.570395+00:00] backup iteration PASS
+{
+  "status": "PASS",
+  "files": 218,
+  "bytes": 27584846,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main 508183c] backup: reproducible snapshot 2026-07-18T15:15:43.423337+00:00
+ 20 files changed, 1634 insertions(+), 112 deletions(-)
+ create mode 100644 artifacts/manifests/aio3_live_runtime_attestation.json
+ create mode 100755 scripts/capture_live_stage_a_runtime.py
+ create mode 100755 scripts/guard_legacy_stage_a_lock.sh
+ create mode 100644 tests/test_live_stage_a_runtime_attestation.py
+ create mode 100644 tests/test_stage_a_launcher_guard.py
+[main 90fe844] backup: reproducible snapshot 2026-07-18T15:15:43.519971+00:00
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+{
+  "status": "PASS",
+  "manifest_files": 218,
+  "checkpoint": "",
+  "checkpoint_verification": null
+}
+* Request at 2026-07-18 23:15:43.696604404 +0800 CST m=+0.026606327
+* Request to https://api.github.com/
+* Request took 1.443329124s
+* Request at 2026-07-18 23:15:45.140515956 +0800 CST m=+1.470517921
+* Request to https://api.github.com/graphql
+* Request took 754.414016ms
+github.com
+  ✓ Logged in to github.com as emma-sue (/root/.config/gh/hosts.yml)
+  ✓ Git operations for github.com configured to use https protocol.
+  ✓ Token: *******************
+  
+[git config --global --replace-all credential.https://github.com.helper ]
+[git config --global --add credential.https://github.com.helper !/usr/bin/gh auth git-credential]
+To https://github.com/emma-sue/aaa.git
+   af0a28d..90fe844  main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.

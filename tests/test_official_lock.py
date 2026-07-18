@@ -9,8 +9,57 @@ import pytest
 from scripts import eval_locked
 
 
+def _write_shared_stage_b_marker(root: Path, *, authorized: bool = True) -> Path:
+    directory = root / "artifacts/manifests"
+    directory.mkdir(parents=True, exist_ok=True)
+    bindings = {}
+    for protocol, filename in eval_locked.STAGE_B_TERMINAL_ATTESTATION_NAMES.items():
+        path = directory / filename
+        terminal = {
+            "protocol": protocol,
+            "stage": "STAGE_B_COMPLETE",
+            "predicted_go": True,
+            "scientific_go": "GO",
+            "capacity_robustness_go": True if protocol == "aio3" else None,
+            "decision_revision_sha256": "c" * 64,
+        }
+        terminal_sha = hashlib.sha256(json.dumps(
+            terminal, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        payload = {
+            "schema_version": eval_locked.SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+            "status": "FROZEN",
+            "protocol": protocol,
+            "stage": "STAGE_B_COMPLETE",
+            "predicted_go": True,
+            "scientific_go": "GO",
+            "stage_b_runtime_manifest_sha256": "a" * 64,
+            "terminal_decision": terminal,
+            "terminal_decision_sha256": terminal_sha,
+            "decision_revision_sha256": "c" * 64,
+            "capacity_robustness_go": True if protocol == "aio3" else None,
+            "official_access_authorized": authorized,
+        }
+        eval_locked.atomic_write_json(path, payload)
+        bindings[protocol] = {
+            "path": str(path.resolve()),
+            "sha256": eval_locked.sha256_file(path),
+        }
+    marker = directory / eval_locked.SHARED_STAGE_B_MARKER_NAME
+    eval_locked.atomic_write_json(marker, {
+        "schema_version": eval_locked.SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+        "status": "FROZEN",
+        "marker_path": str(marker.resolve()),
+        "protocols": bindings,
+        "official_access_authorized": authorized,
+    })
+    return marker
+
+
 @pytest.fixture(autouse=True)
-def _tiny_official_identity_contract(monkeypatch, request):
+def _tiny_official_identity_contract(monkeypatch, request, tmp_path):
+    monkeypatch.setattr(eval_locked, "ROOT", tmp_path)
+    _write_shared_stage_b_marker(tmp_path)
     code_contract = {"tests/frozen_eval.py": "e" * 64}
     monkeypatch.setattr(
         eval_locked, "official_evaluation_code_hashes", lambda: code_contract
@@ -120,6 +169,41 @@ def test_unlocked_official_eval_requires_prefrozen_manifest_before_checkpoint_re
     assert result.returncode != 0
     assert "requires --official-manifest" in result.stderr
     assert "missing.pt" not in result.stderr
+
+
+def test_unlocked_direct_eval_cannot_bypass_shared_stage_b_marker(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(root / "scripts" / "eval_locked.py"),
+            "--config", str(tmp_path / "missing-config.yaml"),
+            "--checkpoint", str(tmp_path / "missing.pt"),
+            "--model", "srsc",
+            "--split", "official_test",
+            "--unlock-official-test",
+            "--official-manifest", str(tmp_path / "missing-manifest.json"),
+            "--output", str(tmp_path / "metrics.csv"),
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode != 0
+    assert "shared AIO3+AIO5 Stage-B terminal marker" in result.stderr
+    assert "missing-config" not in result.stderr
+    assert "missing.pt" not in result.stderr
+
+
+def test_shared_stage_b_marker_rejects_bound_attestation_tamper(tmp_path: Path):
+    marker = eval_locked.validate_shared_stage_b_terminal_marker(tmp_path)
+    assert marker["official_access_authorized"] is True
+    attestation = (
+        tmp_path / "artifacts/manifests"
+        / eval_locked.STAGE_B_TERMINAL_ATTESTATION_NAMES["aio3"]
+    )
+    attestation.write_text(attestation.read_text() + "\n")
+    with pytest.raises(PermissionError, match="path/SHA256 drift"):
+        eval_locked.validate_shared_stage_b_terminal_marker(tmp_path)
 
 
 def test_manifest_selects_only_exact_frozen_model_checkpoint_and_output(tmp_path: Path):
