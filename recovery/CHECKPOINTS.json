@@ -108,6 +108,10 @@
     "step": 221535
   },
   "generated_utc": "2026-07-18T15:15:42.774662+00:00",
+  "git_snapshot": {
+    "commit": "508183c5f8d1dae02284ed24266bd032b6155ee1",
+    "tree": "4af811cf55356d479a35ba12291f17ac1eb00dea"
+  },
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
@@ -189,6 +193,8 @@
       "training_origin": null
     },
     "epoch": 159,
+    "git_snapshot_commit": "508183c5f8d1dae02284ed24266bd032b6155ee1",
+    "git_snapshot_tree": "4af811cf55356d479a35ba12291f17ac1eb00dea",
     "mtime_ns": 1784387736892162832,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
@@ -290,6 +296,8 @@
       "training_origin": null
     },
     "epoch": 159,
+    "git_snapshot_commit": "508183c5f8d1dae02284ed24266bd032b6155ee1",
+    "git_snapshot_tree": "4af811cf55356d479a35ba12291f17ac1eb00dea",
     "mtime_ns": 1784387736892162832,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
@@ -507,6 +515,8 @@
           "training_origin": null
         },
         "epoch": 159,
+        "git_snapshot_commit": "508183c5f8d1dae02284ed24266bd032b6155ee1",
+        "git_snapshot_tree": "4af811cf55356d479a35ba12291f17ac1eb00dea",
         "mtime_ns": 1784387736892162832,
         "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
         "protocol": "aio3",
@@ -608,6 +618,8 @@
           "training_origin": null
         },
         "epoch": 159,
+        "git_snapshot_commit": "508183c5f8d1dae02284ed24266bd032b6155ee1",
+        "git_snapshot_tree": "4af811cf55356d479a35ba12291f17ac1eb00dea",
         "mtime_ns": 1784387736892162832,
         "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
         "protocol": "aio3",
