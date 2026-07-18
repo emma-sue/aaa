@@ -4,35 +4,35 @@
     "sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410"
   },
   "current_best": {
-    "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
-    "asset_name": "val_epoch125_step0198595.pt",
-    "epoch": 125,
-    "mtime_ns": 1784373590652626428,
-    "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
+    "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+    "asset_name": "val_epoch145_step0221535.pt",
+    "epoch": 145,
+    "mtime_ns": 1784381838022252591,
+    "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
     "protocol": "aio3",
     "release_state": "planned",
-    "release_tag": "best-aio3-stage-a-e0125-s0198595",
+    "release_tag": "best-aio3-stage-a-e0145-s0221535",
     "run_name": "aio3_stage_a_coarse_seed1415926",
-    "score": 34.18833113264535,
+    "score": 34.19738720161497,
     "selection": "top3",
-    "sha256": "f16dd4974363b2b73adf4ed9fc797d3c9143193c89458c546282e87592459a8d",
+    "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
     "size": 303986597,
     "stage": "a",
-    "step": 198595
+    "step": 221535
   },
-  "generated_utc": "2026-07-18T13:34:12.980414+00:00",
+  "generated_utc": "2026-07-18T13:37:48.170296+00:00",
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "asset_name": "last.pt",
-    "mtime_ns": 1784381621269510374,
+    "mtime_ns": 1784381810973846529,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
     "release_tag": "resume-aio3-stage-a",
     "run_name": "aio3_stage_a_coarse_seed1415926",
     "selection": "resume-last",
-    "sha256": "267b03e6ec72a520fffd92cab0de362d038458f5fe8f568e2318cc9799841506",
+    "sha256": "bb7b64cfc3781d0f77b11c74d034be061c8e8b5cd498f4e34bc8f3a8f0572453",
     "size": 303948065,
     "stage": "a"
   },
@@ -43,6 +43,23 @@
     "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
   },
   "top3": [
+    {
+      "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+      "asset_name": "val_epoch145_step0221535.pt",
+      "epoch": 145,
+      "mtime_ns": 1784381838022252591,
+      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch145_step0221535.pt",
+      "protocol": "aio3",
+      "release_state": "planned",
+      "release_tag": "best-aio3-stage-a-e0145-s0221535",
+      "run_name": "aio3_stage_a_coarse_seed1415926",
+      "score": 34.19738720161497,
+      "selection": "top3",
+      "sha256": "fc15d85e1dd8127ea84b9785ae6f993d352f07f0a3eefb1f103feb8f36c4cdc0",
+      "size": 303986597,
+      "stage": "a",
+      "step": 221535
+    },
     {
       "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch125_step0198595.pt",
       "asset_name": "val_epoch125_step0198595.pt",
@@ -76,23 +93,6 @@
       "size": 303986597,
       "stage": "a",
       "step": 187125
-    },
-    {
-      "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch140_step0215800.pt",
-      "asset_name": "val_epoch140_step0215800.pt",
-      "epoch": 140,
-      "mtime_ns": 1784379775851429081,
-      "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch140_step0215800.pt",
-      "protocol": "aio3",
-      "release_state": "planned",
-      "release_tag": "best-aio3-stage-a-e0140-s0215800",
-      "run_name": "aio3_stage_a_coarse_seed1415926",
-      "score": 34.13733923857624,
-      "selection": "top3",
-      "sha256": "709c15589ba82da8b5f43eb74e96f11142b75e58dd04aab43593a133203413cf",
-      "size": 303986597,
-      "stage": "a",
-      "step": 215800
     }
   ]
 }

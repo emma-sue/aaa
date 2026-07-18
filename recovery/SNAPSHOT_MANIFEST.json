@@ -34,16 +34,16 @@
       "size": 631
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "41e859259c062681f90f20c8c3ac0d0b9f1981595d64f53520628bfa3ef22a43",
-      "size": 532013
+      "sha256": "8d76880c8f83f42c6527dfefbdc4245255fd303c45fad1a951c0a148fc2b86ec",
+      "size": 533343
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "82fa43bcd2849cccfdb33157e61a7002489eb1b3754bfcec3ca8a7525001e218",
-      "size": 428800
+      "sha256": "27acd136473bf3dd8a651025fa94a1f4416601e4638c1b1a445abd9d79c0f7a6",
+      "size": 431297
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -57,6 +57,10 @@
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
       "size": 226
     },
+    "artifacts/logs/github_backup.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
     "artifacts/logs/orchestrate_aio3_pytest.log": {
       "sha256": "4e5e3ad73a69901f965ca422259e37c9ed38fe2a879f91e7c0952f350162a871",
       "size": 3848
@@ -66,8 +70,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "b072ece521d99864b561c6bd5ec0a83a570cabfb372c94edd84c8c70050f71ba",
-      "size": 428950
+      "sha256": "10953fb586d58ef1da27e47e5886154cc7671a0ecfb722c2ad172aa5daff2f37",
+      "size": 431447
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -82,8 +86,8 @@
       "size": 227
     },
     "artifacts/logs/stage_a_trend_chain.log": {
-      "sha256": "4a18ac3bf86b85d907f9278a8bfda56435dfd96f621d1132395f2a7c02b1fd4e",
-      "size": 27444
+      "sha256": "417983710d7fc3b7f55054f5a1bd3e354e25d9fa4fa29774486209b438e52f73",
+      "size": 29157
     },
     "artifacts/manifests/aio3.json": {
       "sha256": "9b38af6c2af4c2cc4f094e6081aff767627206c44a8c3afe411d0ea498b10721",
@@ -178,8 +182,8 @@
       "size": 11917425
     },
     "artifacts/metrics/aio3_stage_a_coarse_seed1415926_locked_val.jsonl": {
-      "sha256": "77ee9749a14a6e99b74fc29a035123b4df65bbaee8bb52ca642817ab2e50234a",
-      "size": 6132
+      "sha256": "a5b855dda57762e730d632f55dfca7a5798ea5b77103a3f20948e334a3c24deb",
+      "size": 6353
     },
     "artifacts/metrics/metrics_long.csv": {
       "sha256": "e6a8efa2bdd273b4d6891fb58b31c886dbe127bf0d402efaff3832e63534f5a0",
@@ -313,6 +317,10 @@
       "sha256": "3c68e86c601560eac3332f61e1ca30b371da0cfbfc6692b001c37d2e763dc89c",
       "size": 1875
     },
+    "artifacts/metrics/stage_a_epoch145_trend.json": {
+      "sha256": "67457798f25ca78566ec969271e404dd7ab5e0ee794835f89694b97445b3c962",
+      "size": 1871
+    },
     "artifacts/reference/r2r_cvpr2026_tables.json": {
       "sha256": "3e1961496494577971dac5e8406f727609735a5fd97a75a569b7da24a40cc386",
       "size": 1172
@@ -374,19 +382,19 @@
       "size": 35820
     },
     "docs/contracts/v1.4.md": {
-      "sha256": "2668ec4ed15baf3ead1484ac1d0d9ba0175178224a6f9df634d9817b965a1ea9",
-      "size": 275679
+      "sha256": "b628290d408218fb343c184237f7eddf0459abb9289cb16fdefe5529ed3d2dfd",
+      "size": 276362
     },
     "environment/requirements-resume.txt": {
       "sha256": "2620ecd96f41d0f6d76a8aaae8ee1d7ea0820c584c902ce4b6e61937e0bd5314",
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "d19efbb87cb2b22cbc1d2a8a8659ae35cfbebb91debecf7df5fb35f70c58507f",
+      "sha256": "6f3535f5cffbf0621956dbd552614edcecf8abf81aa4265930ca4d1b46c98f36",
       "size": 4076
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "e332974c23b25cee330f9fd080f9f2eb7ec55de33027e36334e8d2741fdc08c6",
+      "sha256": "4d55110fc68a4b2398a6e0690af19b6d5d2fb740286fd6846181f2e9eba25cde",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -434,7 +442,7 @@
       "size": 2347
     },
     "reports/STAGE_A_REPORT.md": {
-      "sha256": "aa5a5308a521c9e958fd9e36251b6739697af860bbb83334a3a36f27855a131a",
+      "sha256": "ea53eeae931ea7a2fa7da0518194bcb11afd2b0cbe22aa47cd4567541d2ad11e",
       "size": 864
     },
     "reports/STAGE_B_ORACLE_REPORT.md": {
@@ -830,7 +838,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T13:34:14.239886+00:00",
+  "generated_utc": "2026-07-18T13:37:49.565125+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }
