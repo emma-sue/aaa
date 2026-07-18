@@ -65,10 +65,11 @@ def ensure_gh_repo(repo: str, allow_public: bool) -> None:
     if shutil.which("gh") is None:
         raise RuntimeError("GitHub CLI `gh` is not installed")
     run(["gh", "auth", "status"])
-    visibility = json.loads(run(
-        ["gh", "repo", "view", repo, "--json", "visibility"], capture=True,
-    ).stdout)["visibility"]
-    if visibility.upper() != "PRIVATE" and not allow_public:
+    payload = json.loads(run(
+        ["gh", "repo", "view", repo, "--json", "isPrivate"], capture=True,
+    ).stdout)
+    visibility = "PRIVATE" if payload["isPrivate"] else "PUBLIC"
+    if visibility != "PRIVATE" and not allow_public:
         raise RuntimeError(f"Refusing checkpoint publication to {visibility} repo without --allow-public")
 
 
