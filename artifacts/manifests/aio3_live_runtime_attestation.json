@@ -1,0 +1,217 @@
+{
+  "boot_id": "c67f4cec-bf3b-4f86-900a-5471f1d163fd",
+  "captured_utc": "2026-07-18T15:09:48.492357+00:00",
+  "checkpoint_observation": {
+    "batch_in_epoch": 554,
+    "bytes": 303948065,
+    "config_sha256": "320d356b2fd38701cc92aeeb74b2560ece8e76bc7a2bf13497d111d0fcc4a410",
+    "embedded_code_contract": null,
+    "embedded_data_contract": null,
+    "embedded_runtime": {
+      "accumulation": 1,
+      "backend": "nccl",
+      "global_effective_batch": 120,
+      "per_gpu_batch": 30,
+      "world_size": 4
+    },
+    "embedded_workers_per_rank": null,
+    "epoch": 158,
+    "path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+    "rank_rng_width": 4,
+    "sha256": "8554a989f15e7d2337fa051fd45cb66606775041998f17012afaeae1c5bba5fc",
+    "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
+    "step": 237000
+  },
+  "claim": "Externally observed runtime evidence only; this does not backfill or attribute missing launch-time code/data fields to the checkpoint.",
+  "cuda_owners": [
+    {
+      "cmdline": [
+        "python",
+        "scripts/train_stage_a_ddp.py",
+        "--config",
+        "configs/protocol_aio3.yaml",
+        "--resume",
+        "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "--run-name",
+        "aio3_stage_a_coarse_seed1415926",
+        "--per-gpu-batch",
+        "30",
+        "--accumulation",
+        "1",
+        "--workers-per-rank",
+        "8"
+      ],
+      "environment": {
+        "LOCAL_RANK": "0",
+        "MASTER_ADDR": "127.0.0.1",
+        "MASTER_PORT": "29658",
+        "OMP_NUM_THREADS": "1",
+        "RANK": "0",
+        "WORLD_SIZE": "4"
+      },
+      "gpu_uuid": "GPU-eb757235-4de4-7cd2-4a8c-f2e6bda02c0b",
+      "pid": 14610,
+      "process_name": "python",
+      "start_ticks_since_boot": 2088924248,
+      "used_memory_mib": 22694
+    },
+    {
+      "cmdline": [
+        "python",
+        "scripts/train_stage_a_ddp.py",
+        "--config",
+        "configs/protocol_aio3.yaml",
+        "--resume",
+        "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "--run-name",
+        "aio3_stage_a_coarse_seed1415926",
+        "--per-gpu-batch",
+        "30",
+        "--accumulation",
+        "1",
+        "--workers-per-rank",
+        "8"
+      ],
+      "environment": {
+        "LOCAL_RANK": "1",
+        "MASTER_ADDR": "127.0.0.1",
+        "MASTER_PORT": "29658",
+        "OMP_NUM_THREADS": "1",
+        "RANK": "1",
+        "WORLD_SIZE": "4"
+      },
+      "gpu_uuid": "GPU-d8de7dc9-6f6e-65f3-3b6b-6c496c002eb7",
+      "pid": 14609,
+      "process_name": "python",
+      "start_ticks_since_boot": 2088924248,
+      "used_memory_mib": 22582
+    },
+    {
+      "cmdline": [
+        "python",
+        "scripts/train_stage_a_ddp.py",
+        "--config",
+        "configs/protocol_aio3.yaml",
+        "--resume",
+        "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "--run-name",
+        "aio3_stage_a_coarse_seed1415926",
+        "--per-gpu-batch",
+        "30",
+        "--accumulation",
+        "1",
+        "--workers-per-rank",
+        "8"
+      ],
+      "environment": {
+        "LOCAL_RANK": "2",
+        "MASTER_ADDR": "127.0.0.1",
+        "MASTER_PORT": "29658",
+        "OMP_NUM_THREADS": "1",
+        "RANK": "2",
+        "WORLD_SIZE": "4"
+      },
+      "gpu_uuid": "GPU-23150da9-0f7b-6b55-4de7-54661a5d302f",
+      "pid": 14611,
+      "process_name": "python",
+      "start_ticks_since_boot": 2088924248,
+      "used_memory_mib": 22438
+    },
+    {
+      "cmdline": [
+        "python",
+        "scripts/train_stage_a_ddp.py",
+        "--config",
+        "configs/protocol_aio3.yaml",
+        "--resume",
+        "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
+        "--run-name",
+        "aio3_stage_a_coarse_seed1415926",
+        "--per-gpu-batch",
+        "30",
+        "--accumulation",
+        "1",
+        "--workers-per-rank",
+        "8"
+      ],
+      "environment": {
+        "LOCAL_RANK": "3",
+        "MASTER_ADDR": "127.0.0.1",
+        "MASTER_PORT": "29658",
+        "OMP_NUM_THREADS": "1",
+        "RANK": "3",
+        "WORLD_SIZE": "4"
+      },
+      "gpu_uuid": "GPU-4003cd2e-4d51-69d8-eedd-c871ae52a8a6",
+      "pid": 14613,
+      "process_name": "python",
+      "start_ticks_since_boot": 2088924248,
+      "used_memory_mib": 22568
+    }
+  ],
+  "evidence_files": {
+    "artifacts/logs/ddp_stage_a/rank0.log": {
+      "bytes_at_capture": 495276,
+      "sha256_at_capture": "0b3d50fe612540507a8f3d99f7dcb1ea0414be70270b3df26fec821ca6c5de39"
+    },
+    "artifacts/logs/pipeline_ddp.log": {
+      "bytes_at_capture": 495426,
+      "sha256_at_capture": "e609a1cb112976c7987c7fab9ff0c83cab90c518123fcceb623257b450b14689"
+    },
+    "artifacts/logs/watchdog.log": {
+      "bytes_at_capture": 2795790,
+      "sha256_at_capture": "d0082d1860bea2adcac4ad70039904a31da7c6b0b4eb2242f87c4b010438bfbb"
+    },
+    "reports/PROTOCOL_AMENDMENT_AIO3_BATCH_MIGRATION.md": {
+      "bytes_at_capture": 4341,
+      "sha256_at_capture": "9e22515f946a35d097c174df15ad83be2455266d3e91bf3bc4bd5aaf4f7ff62a"
+    }
+  },
+  "gpu_inventory": [
+    {
+      "index": 0,
+      "memory_total_mib": 24564,
+      "name": "NVIDIA GeForce RTX 4090",
+      "uuid": "GPU-eb757235-4de4-7cd2-4a8c-f2e6bda02c0b"
+    },
+    {
+      "index": 1,
+      "memory_total_mib": 24564,
+      "name": "NVIDIA GeForce RTX 4090",
+      "uuid": "GPU-d8de7dc9-6f6e-65f3-3b6b-6c496c002eb7"
+    },
+    {
+      "index": 2,
+      "memory_total_mib": 24564,
+      "name": "NVIDIA GeForce RTX 4090",
+      "uuid": "GPU-23150da9-0f7b-6b55-4de7-54661a5d302f"
+    },
+    {
+      "index": 3,
+      "memory_total_mib": 24564,
+      "name": "NVIDIA GeForce RTX 4090",
+      "uuid": "GPU-4003cd2e-4d51-69d8-eedd-c871ae52a8a6"
+    }
+  ],
+  "launcher": {
+    "cmdline": [
+      "bash",
+      "scripts/launch_aio3_stage_a_4x4090.sh"
+    ],
+    "pid": 14592,
+    "start_ticks_since_boot": 2088924239
+  },
+  "observed_runtime": {
+    "accumulation": 1,
+    "backend": "nccl",
+    "global_effective_batch": 120,
+    "per_gpu_batch": 30,
+    "workers_evidence": "live_process_cmdline",
+    "workers_per_rank": 8,
+    "world_size": 4
+  },
+  "run_name": "aio3_stage_a_coarse_seed1415926",
+  "schema": "srsc.legacy_stage_a.live_runtime_attestation.v1",
+  "scientific_limit": "STATE_EXACT_LEGACY_CODE_DATA_UNPROVEN",
+  "status": "PASS"
+}

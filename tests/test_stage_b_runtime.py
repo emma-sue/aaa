@@ -12,6 +12,45 @@ from scripts import preflight_stage_b_runtime as preflight
 from scripts import orchestrate
 
 
+def _physical_gpu_inventory():
+    total_mib = 24 * 1024
+    used_mib = 64
+    records = []
+    for index in runtime.REQUIRED_PHYSICAL_GPU_INDICES:
+        free_mib = total_mib - used_mib
+        records.append(
+            {
+                "physical_index": index,
+                "uuid": f"GPU-{index:032d}",
+                "name": "RTX 4090",
+                "total_memory_mib": total_mib,
+                "free_memory_mib": free_mib,
+                "total_memory_bytes": total_mib * 2**20,
+                "free_memory_bytes": free_mib * 2**20,
+                "startup_used_bytes": used_mib * 2**20,
+                "startup_idle_pass": True,
+                "compute_mode": "Default",
+            }
+        )
+    return {
+        "schema": runtime.PHYSICAL_GPU_INVENTORY_SCHEMA,
+        "source": "nvidia-smi_parent_no_cuda_context",
+        "command": [
+            "nvidia-smi",
+            f"--query-gpu={','.join(runtime.NVIDIA_SMI_INVENTORY_QUERY)}",
+            "--format=csv,noheader,nounits",
+        ],
+        "required_physical_indices": list(runtime.REQUIRED_PHYSICAL_GPU_INDICES),
+        "max_startup_used_bytes": runtime.MAX_STARTUP_GPU_USED_BYTES,
+        "gpu_count": 4,
+        "homogeneous_name": "RTX 4090",
+        "homogeneous_total_memory_bytes": total_mib * 2**20,
+        "homogeneous_compute_mode": "Default",
+        "all_startup_idle": True,
+        "gpus": records,
+    }
+
+
 def _write_templates(root: Path, protocol: str) -> tuple[Path, Path, Path]:
     split = root / "split.json"
     split.write_text('{"locked": true}\n')
@@ -55,20 +94,62 @@ def _write_templates(root: Path, protocol: str) -> tuple[Path, Path, Path]:
 
 
 def _attempt(protocol: str, pair: tuple[int, int], passed: bool) -> dict:
-    probes = [
-        {"probe_id": probe_id, "passed": passed, "peak_allocated_bytes": 1}
-        for probe_id in runtime.required_probe_ids(protocol)
-    ]
+    inventory = _physical_gpu_inventory()
+    inventory_sha256 = runtime.canonical_json_sha256(inventory)
+    probes = []
+    for probe_id in runtime.required_probe_ids(protocol):
+        role, stage, feedback, _scope = probe_id.split(":")
+        physical_gpu_index = runtime.expected_physical_gpu_for_arm(
+            protocol, role, stage, feedback
+        )
+        gpu_record = inventory["gpus"][physical_gpu_index]
+        probes.append(
+            {
+                "probe_id": probe_id,
+                "passed": passed,
+                "status": "PASS" if passed else "OOM",
+                "worker_status": "PASS" if passed else "OOM",
+                "error": None if passed else "synthetic memory-only OOM",
+                "peak_allocated_bytes": 1,
+                "physical_gpu_index": physical_gpu_index,
+                "physical_gpu_inventory_sha256": inventory_sha256,
+                "worker_provenance": {
+                    "physical_gpu_index": physical_gpu_index,
+                    "physical_gpu_inventory": inventory,
+                    "physical_gpu_inventory_sha256": inventory_sha256,
+                    "gpu": {
+                        "physical_index": physical_gpu_index,
+                        "uuid": gpu_record["uuid"],
+                        "name": gpu_record["name"],
+                        "total_memory_bytes": gpu_record["total_memory_bytes"],
+                        "compute_mode": gpu_record["compute_mode"],
+                        "logical_cuda_index": 0,
+                        "visible_device_count": 1,
+                        "cuda_visible_devices": gpu_record["uuid"],
+                        "cuda_device_order": "PCI_BUS_ID",
+                    },
+                },
+            }
+        )
+    assignment = {
+        f"{role}:{stage}:{feedback}": runtime.expected_physical_gpu_for_arm(
+            protocol, role, stage, feedback
+        )
+        for role, stage, feedback in runtime.required_worker_arms(protocol)
+    }
     return {
         "micro_batch": pair[0],
         "accumulation": pair[1],
         "effective_batch": pair[0] * pair[1],
         "all_pass": passed,
         "probes": probes,
+        "physical_gpu_assignment": assignment,
+        "physical_gpu_coverage": list(runtime.REQUIRED_PHYSICAL_GPU_INDICES),
     }
 
 
 def _worker_payload(protocol: str, selected_index: int = 1) -> dict:
+    inventory = _physical_gpu_inventory()
     candidates = runtime.STAGE_B_RUNTIME_CANDIDATES[protocol]
     attempts = [
         _attempt(protocol, pair, index == selected_index)
@@ -95,7 +176,14 @@ def _worker_payload(protocol: str, selected_index: int = 1) -> dict:
         "input_bindings": {"mock": True},
         "inputs_unchanged_through_preflight": True,
         "attempts": attempts,
-        "hardware": {"name": "mock-gpu"},
+        "hardware": {
+            "inventory": inventory,
+            "inventory_sha256": runtime.canonical_json_sha256(inventory),
+            "assignment_policy": runtime.GPU_ASSIGNMENT_POLICY,
+            "required_physical_indices": list(
+                runtime.REQUIRED_PHYSICAL_GPU_INDICES
+            ),
+        },
     }
 
 
@@ -127,6 +215,19 @@ def test_first_all_pass_is_candidate_order_only():
     ) == (8, 8)
     with pytest.raises(RuntimeError, match="no preregistered"):
         runtime.first_all_pass("aio3", {(16, 4): False})
+
+
+def test_worker_arms_use_stable_four_gpu_round_robin():
+    aio5 = [
+        runtime.expected_physical_gpu_for_arm("aio5", *arm)
+        for arm in runtime.required_worker_arms("aio5")
+    ]
+    aio3 = [
+        runtime.expected_physical_gpu_for_arm("aio3", *arm)
+        for arm in runtime.required_worker_arms("aio3")
+    ]
+    assert aio5 == [0, 1, 2, 3]
+    assert aio3 == [0, 1, 2, 3, 0, 1, 2, 3]
 
 
 def test_embargo_detects_metric_contract_checkpoint_and_replay(tmp_path: Path):
@@ -296,7 +397,14 @@ def test_worker_must_stop_at_first_pass_and_cover_every_probe():
     payload = _worker_payload("aio3", selected_index=1)
     payload["attempts"][0]["all_pass"] = True
     payload["attempts"][0]["probes"] = [
-        {**probe, "passed": True} for probe in payload["attempts"][0]["probes"]
+        {
+            **probe,
+            "passed": True,
+            "status": "PASS",
+            "worker_status": "PASS",
+            "error": None,
+        }
+        for probe in payload["attempts"][0]["probes"]
     ]
     with pytest.raises(RuntimeError, match="stop immediately"):
         runtime._validate_worker_result(payload, "aio3")
@@ -307,6 +415,29 @@ def test_worker_must_stop_at_first_pass_and_cover_every_probe():
     payload = _worker_payload("aio3", selected_index=0)
     payload["quality_metrics_computed"] = True
     with pytest.raises(RuntimeError, match="exceeded its no-metric"):
+        runtime._validate_worker_result(payload, "aio3")
+
+    payload = _worker_payload("aio3", selected_index=0)
+    payload["attempts"][0]["physical_gpu_coverage"] = [0, 1, 2]
+    with pytest.raises(RuntimeError, match="coverage drift"):
+        runtime._validate_worker_result(payload, "aio3")
+
+    payload = _worker_payload("aio3", selected_index=0)
+    probe = payload["attempts"][0]["probes"][0]
+    probe["physical_gpu_index"] = 3
+    with pytest.raises(RuntimeError, match="mapping drift"):
+        runtime._validate_worker_result(payload, "aio3")
+
+    payload = _worker_payload("aio3", selected_index=0)
+    payload["hardware"]["inventory"]["gpus"][3]["name"] = "other GPU"
+    with pytest.raises(RuntimeError, match="share model"):
+        runtime._validate_worker_result(payload, "aio3")
+
+    payload = _worker_payload("aio3", selected_index=1)
+    payload["attempts"][0]["probes"][0].update(
+        status="ERROR", worker_status="ERROR", error="arbitrary failure"
+    )
+    with pytest.raises(RuntimeError, match="not caused by explicit OOM/headroom"):
         runtime._validate_worker_result(payload, "aio3")
 
 
@@ -340,6 +471,9 @@ def test_real_preflight_driver_output_matches_parent_schema(
     stage_a, _stats, _split = _write_templates(tmp_path, "aio3")
     monkeypatch.setattr(preflight, "ROOT", tmp_path)
     monkeypatch.setattr(
+        preflight, "_query_physical_gpu_inventory", _physical_gpu_inventory
+    )
+    monkeypatch.setattr(
         preflight,
         "largest_locked_val_shape",
         lambda _config: {
@@ -356,6 +490,9 @@ def test_real_preflight_driver_output_matches_parent_schema(
 
     def fake_worker(**kwargs):
         observed_workers.append(kwargs)
+        inventory = kwargs["physical_gpu_inventory"]
+        physical_gpu_index = kwargs["physical_gpu_index"]
+        gpu_record = inventory["gpus"][physical_gpu_index]
         return {
                 "schema": preflight.SCHEMA,
                 "status": "PASS",
@@ -372,6 +509,22 @@ def test_real_preflight_driver_output_matches_parent_schema(
             "template_role": kwargs["role"],
             "stage": kwargs["stage"],
             "feedback": kwargs["feedback"],
+            "physical_gpu_index": physical_gpu_index,
+            "physical_gpu_inventory": inventory,
+            "physical_gpu_inventory_sha256": runtime.canonical_json_sha256(
+                inventory
+            ),
+            "gpu": {
+                "physical_index": physical_gpu_index,
+                "uuid": gpu_record["uuid"],
+                "name": gpu_record["name"],
+                "total_memory_bytes": gpu_record["total_memory_bytes"],
+                "compute_mode": gpu_record["compute_mode"],
+                "logical_cuda_index": 0,
+                "visible_device_count": 1,
+                "cuda_visible_devices": gpu_record["uuid"],
+                "cuda_device_order": "PCI_BUS_ID",
+            },
         }
 
     monkeypatch.setattr(preflight, "_run_worker", fake_worker)

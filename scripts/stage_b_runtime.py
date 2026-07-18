@@ -67,6 +67,8 @@ def assert_stage_b_cublas_environment(
             "CUBLAS_WORKSPACE_CONFIG="
             f"{REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG!r}"
         )
+
+
 PREFLIGHT_CODE_RELATIVE_PATHS = (
     "scripts/preflight_stage_b_runtime.py",
     "scripts/train.py",
@@ -629,11 +631,41 @@ def _validate_worker_result(
                     f"Stage-B probe lacks bound worker GPU provenance: {probe_id}"
                 )
             gpu = provenance.get("gpu")
-            if not isinstance(gpu, dict) or gpu.get(
-                "physical_index"
-            ) != expected_index:
+            inventory_gpu = inventory["gpus"][expected_index]
+            if not isinstance(gpu, dict) or (
+                gpu.get("physical_index") != expected_index
+                or gpu.get("uuid") != inventory_gpu["uuid"]
+                or gpu.get("name") != inventory_gpu["name"]
+                or gpu.get("total_memory_bytes")
+                != inventory_gpu["total_memory_bytes"]
+                or gpu.get("compute_mode") != inventory_gpu["compute_mode"]
+                or gpu.get("logical_cuda_index") != 0
+                or gpu.get("visible_device_count") != 1
+                or gpu.get("cuda_visible_devices") != inventory_gpu["uuid"]
+                or gpu.get("cuda_device_order") != "PCI_BUS_ID"
+            ):
                 raise RuntimeError(
                     f"Stage-B probe worker GPU identity drift: {probe_id}"
+                )
+            passed = probe.get("passed") is True
+            status = probe.get("status")
+            worker_status = probe.get("worker_status")
+            if passed:
+                if status != "PASS" or worker_status not in {
+                    "PASS",
+                    "OOM",
+                    "HEADROOM_FAIL",
+                }:
+                    raise RuntimeError(
+                        f"Stage-B passing probe status is invalid: {probe_id}"
+                    )
+            elif (
+                status not in {"OOM", "HEADROOM_FAIL", "SKIPPED"}
+                or worker_status not in {"OOM", "HEADROOM_FAIL"}
+            ):
+                raise RuntimeError(
+                    "Stage-B candidate fallback was not caused by explicit "
+                    f"OOM/headroom evidence: {probe_id}"
                 )
             observed_indices.add(expected_index)
         if sorted(observed_indices) != list(REQUIRED_PHYSICAL_GPU_INDICES):

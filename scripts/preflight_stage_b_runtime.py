@@ -511,6 +511,54 @@ def _software_versions() -> dict:
     }
 
 
+def _validated_worker_gpu_contract(args) -> dict:
+    inventory = _parse_bound_gpu_inventory(args.physical_gpu_inventory_json)
+    physical_index = int(args.physical_gpu_index)
+    if physical_index not in REQUIRED_PHYSICAL_GPU_INDICES:
+        raise RuntimeError("worker physical GPU index is outside 0..3")
+    expected = inventory["gpus"][physical_index]
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    device_order = os.environ.get("CUDA_DEVICE_ORDER")
+    if visible != expected["uuid"]:
+        raise RuntimeError(
+            "worker CUDA_VISIBLE_DEVICES is not the assigned single physical GPU"
+        )
+    if device_order != "PCI_BUS_ID":
+        raise RuntimeError("worker CUDA_DEVICE_ORDER must be PCI_BUS_ID")
+    if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
+        raise RuntimeError("worker must observe exactly one logical CUDA device")
+    properties = torch.cuda.get_device_properties(0)
+    cuda_usable_total = int(properties.total_memory)
+    physical_total = int(expected["total_memory_bytes"])
+    if (
+        properties.name != expected["name"]
+        or cuda_usable_total <= 0
+        or cuda_usable_total > physical_total
+        or physical_total - cuda_usable_total > 2**30
+    ):
+        raise RuntimeError(
+            "worker logical cuda:0 does not match assigned physical GPU inventory"
+        )
+    return {
+        "physical_gpu_index": physical_index,
+        "physical_gpu_inventory": inventory,
+        "physical_gpu_inventory_sha256": canonical_json_sha256(inventory),
+        "gpu": {
+            "physical_index": physical_index,
+            "uuid": expected["uuid"],
+            "name": properties.name,
+            "total_memory_bytes": physical_total,
+            "cuda_usable_total_memory_bytes": cuda_usable_total,
+            "compute_mode": expected["compute_mode"],
+            "logical_cuda_index": 0,
+            "visible_device_count": 1,
+            "cuda_visible_devices": visible,
+            "cuda_device_order": device_order,
+            "compute_capability": [properties.major, properties.minor],
+        },
+    }
+
+
 def _static_worker_metadata(args) -> dict:
     """Best-effort immutable provenance, including pre-forward failures."""
     config = Path(args.config).resolve()
@@ -523,14 +571,7 @@ def _static_worker_metadata(args) -> dict:
         if args.stage_a_checkpoint
         else None
     )
-    gpu = None
-    if torch.cuda.is_available():
-        properties = torch.cuda.get_device_properties(0)
-        gpu = {
-            "name": properties.name,
-            "total_memory_bytes": int(properties.total_memory),
-            "compute_capability": [properties.major, properties.minor],
-        }
+    gpu_contract = _validated_worker_gpu_contract(args)
     return {
         "schema": SCHEMA,
         "protocol": args.protocol,
@@ -539,7 +580,7 @@ def _static_worker_metadata(args) -> dict:
         "micro_batch": int(args.micro_batch),
         "accumulation": int(args.accumulation),
         "effective_batch": int(args.micro_batch * args.accumulation),
-        "gpu": gpu,
+        **gpu_contract,
         "software": _software_versions(),
         "code_sha256": preflight_code_hashes(ROOT),
         "config": str(config),
@@ -597,6 +638,16 @@ def _probe_provenance(worker: dict) -> dict:
             "effective_batch", metadata.get("effective_batch")
         ),
         "gpu": worker.get("gpu", metadata.get("gpu")),
+        "physical_gpu_index": worker.get(
+            "physical_gpu_index", metadata.get("physical_gpu_index")
+        ),
+        "physical_gpu_inventory": worker.get(
+            "physical_gpu_inventory", metadata.get("physical_gpu_inventory")
+        ),
+        "physical_gpu_inventory_sha256": worker.get(
+            "physical_gpu_inventory_sha256",
+            metadata.get("physical_gpu_inventory_sha256"),
+        ),
         "software": worker.get("software", metadata.get("software")),
         "code_sha256": worker.get(
             "code_sha256", metadata.get("code_sha256")
@@ -763,6 +814,8 @@ def _validate_worker_for_probe(
     height: int,
     width: int,
     input_bindings: dict,
+    physical_gpu_index: int,
+    physical_gpu_inventory: dict,
 ) -> str:
     """Validate one subprocess record and classify only allowed fallbacks."""
     provenance = _probe_provenance(worker)
@@ -789,6 +842,11 @@ def _validate_worker_for_probe(
         "quality_metrics_computed": False,
         "checkpoint_written": False,
         "run_contract_written": False,
+        "physical_gpu_index": physical_gpu_index,
+        "physical_gpu_inventory": physical_gpu_inventory,
+        "physical_gpu_inventory_sha256": canonical_json_sha256(
+            physical_gpu_inventory
+        ),
     }
     mismatched = sorted(
         key for key, value in expected.items() if provenance.get(key) != value
@@ -818,6 +876,27 @@ def _validate_worker_for_probe(
         or not software.get("cuda_runtime")
     ):
         raise RuntimeError("worker lacks GPU/software provenance")
+    validate_physical_gpu_inventory(physical_gpu_inventory)
+    expected_gpu = physical_gpu_inventory["gpus"][physical_gpu_index]
+    if (
+        gpu.get("physical_index") != physical_gpu_index
+        or gpu.get("uuid") != expected_gpu["uuid"]
+        or gpu.get("name") != expected_gpu["name"]
+        or int(gpu.get("total_memory_bytes", 0))
+        != expected_gpu["total_memory_bytes"]
+        or int(gpu.get("cuda_usable_total_memory_bytes", 0)) <= 0
+        or int(gpu.get("cuda_usable_total_memory_bytes", 0))
+        > expected_gpu["total_memory_bytes"]
+        or expected_gpu["total_memory_bytes"]
+        - int(gpu.get("cuda_usable_total_memory_bytes", 0))
+        > 2**30
+        or gpu.get("compute_mode") != expected_gpu["compute_mode"]
+        or gpu.get("logical_cuda_index") != 0
+        or gpu.get("visible_device_count") != 1
+        or gpu.get("cuda_visible_devices") != expected_gpu["uuid"]
+        or gpu.get("cuda_device_order") != "PCI_BUS_ID"
+    ):
+        raise RuntimeError("worker physical/logical GPU identity mismatch")
 
     status = worker.get("status")
     if status not in {"PASS", "OOM", "HEADROOM_FAIL"}:
@@ -865,6 +944,7 @@ def _validate_worker_for_probe(
 def execute_worker(args) -> dict:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for a Stage-B memory worker")
+    gpu_contract = _validated_worker_gpu_contract(args)
     cfg = yaml.safe_load(Path(args.config).read_text())
     if cfg.get("protocol") != args.protocol:
         raise ValueError("worker protocol/config mismatch")
@@ -972,7 +1052,6 @@ def execute_worker(args) -> dict:
     native_result["memory"] = _cuda_memory_snapshot()
     native_result["adam_state_retained_bytes"] = adam_bytes_before_native
 
-    properties = torch.cuda.get_device_properties(0)
     headroom_pass = (
         train_result["memory"]["headroom_pass"]
         and native_result["memory"]["headroom_pass"]
@@ -1002,11 +1081,7 @@ def execute_worker(args) -> dict:
             else "template_native_strict"
         ),
         "coordinate_stats_origin": coordinate_stats_origin,
-        "gpu": {
-            "name": properties.name,
-            "total_memory_bytes": int(properties.total_memory),
-            "compute_capability": [properties.major, properties.minor],
-        },
+        **gpu_contract,
         "software": _software_versions(),
         "code_sha256": preflight_code_hashes(ROOT),
         "split_manifest_path": str(Path(cfg["split_manifest"]).resolve()),
@@ -1035,6 +1110,8 @@ def _worker_parser(subparsers) -> None:
     worker.add_argument("--accumulation", type=int, required=True)
     worker.add_argument("--probe-height", type=int, required=True)
     worker.add_argument("--probe-width", type=int, required=True)
+    worker.add_argument("--physical-gpu-index", type=int, required=True)
+    worker.add_argument("--physical-gpu-inventory-json", required=True)
 
 
 def _driver_parser(subparsers) -> None:
@@ -1091,6 +1168,8 @@ def _probe_records(worker: dict, role: str, stage: str, feedback: str) -> list[d
         and native_memory.get("headroom_pass") is True
         and worker.get("failed_phase") != "native_val"
     )
+    physical_gpu_index = provenance.get("physical_gpu_index")
+    inventory_sha256 = provenance.get("physical_gpu_inventory_sha256")
     return [
         {
             "probe_id": f"{role}:{stage}:{feedback}:train_step",
@@ -1105,6 +1184,8 @@ def _probe_records(worker: dict, role: str, stage: str, feedback: str) -> list[d
             "worker_status": status,
             "error": worker.get("error"),
             "worker_provenance": provenance,
+            "physical_gpu_index": physical_gpu_index,
+            "physical_gpu_inventory_sha256": inventory_sha256,
         },
         {
             "probe_id": f"{role}:{stage}:{feedback}:native_val",
@@ -1116,6 +1197,8 @@ def _probe_records(worker: dict, role: str, stage: str, feedback: str) -> list[d
             "worker_status": status,
             "error": worker.get("error"),
             "worker_provenance": provenance,
+            "physical_gpu_index": physical_gpu_index,
+            "physical_gpu_inventory_sha256": inventory_sha256,
         },
     ]
 
@@ -1135,6 +1218,8 @@ def _run_worker(
     accumulation: int,
     height: int,
     width: int,
+    physical_gpu_index: int,
+    physical_gpu_inventory: dict,
 ) -> dict:
     command = [
         sys.executable,
@@ -1158,6 +1243,14 @@ def _run_worker(
         str(height),
         "--probe-width",
         str(width),
+        "--physical-gpu-index",
+        str(physical_gpu_index),
+        "--physical-gpu-inventory-json",
+        json.dumps(
+            physical_gpu_inventory,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     ]
     if checkpoint is not None:
         command += ["--stage-a-checkpoint", str(checkpoint)]
@@ -1167,12 +1260,18 @@ def _run_worker(
         command += [
             "--coordinate-stats-override", str(coordinate_stats_override.resolve())
         ]
+    environment = dict(os.environ)
+    environment["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    environment["CUDA_VISIBLE_DEVICES"] = physical_gpu_inventory["gpus"][
+        physical_gpu_index
+    ]["uuid"]
     completed = subprocess.run(
         command,
         cwd=root,
         text=True,
         capture_output=True,
         check=False,
+        env=environment,
     )
     try:
         payload = _parse_worker_json(completed.stdout)
@@ -1213,6 +1312,10 @@ def execute_driver(args) -> tuple[dict, bool]:
     root = Path(args.root).resolve()
     if root != ROOT.resolve():
         raise ValueError(f"--root {root} does not own this worker at {ROOT}")
+    physical_gpu_inventory = _query_physical_gpu_inventory()
+    physical_gpu_inventory_sha256 = canonical_json_sha256(
+        physical_gpu_inventory
+    )
     candidates_raw = json.loads(args.candidates_json)
     if not isinstance(candidates_raw, list) or not candidates_raw:
         raise ValueError("candidates-json must be a non-empty list")
@@ -1293,6 +1396,12 @@ def execute_driver(args) -> tuple[dict, bool]:
     started = time.monotonic()
     for micro_batch, accumulation in candidates:
         probes = []
+        physical_gpu_assignment = {
+            f"{role}:{stage}:{feedback}": expected_physical_gpu_for_arm(
+                args.protocol, role, stage, feedback
+            )
+            for role, stage, feedback in required_worker_arms(args.protocol)
+        }
         effective_batch = micro_batch * accumulation
         for (
             role, template, checkpoint, allow_random, coordinate_stats_override
@@ -1307,6 +1416,9 @@ def execute_driver(args) -> tuple[dict, bool]:
                 )
             for stage in ALLOWED_STAGES:
                 for feedback in ALLOWED_FEEDBACK:
+                    physical_gpu_index = expected_physical_gpu_for_arm(
+                        args.protocol, role, stage, feedback
+                    )
                     worker = _run_worker(
                         root=root,
                         protocol=args.protocol,
@@ -1321,6 +1433,8 @@ def execute_driver(args) -> tuple[dict, bool]:
                         accumulation=accumulation,
                         height=height,
                         width=width,
+                        physical_gpu_index=physical_gpu_index,
+                        physical_gpu_inventory=physical_gpu_inventory,
                     )
                     try:
                         _validate_worker_for_probe(
@@ -1334,6 +1448,8 @@ def execute_driver(args) -> tuple[dict, bool]:
                             height=height,
                             width=width,
                             input_bindings=input_bindings,
+                            physical_gpu_index=physical_gpu_index,
+                            physical_gpu_inventory=physical_gpu_inventory,
                         )
                     except Exception as error:
                         fatal_error = {
@@ -1351,12 +1467,32 @@ def execute_driver(args) -> tuple[dict, bool]:
             if fatal_error is not None:
                 break
         all_pass = all(probe["passed"] for probe in probes)
+        physical_gpu_coverage = sorted(
+            {
+                int(probe["physical_gpu_index"])
+                for probe in probes
+                if probe.get("physical_gpu_index") is not None
+            }
+        )
+        if fatal_error is None and physical_gpu_coverage != list(
+            REQUIRED_PHYSICAL_GPU_INDICES
+        ):
+            fatal_error = {
+                "status": "INCOMPLETE_PHYSICAL_GPU_COVERAGE",
+                "error": (
+                    "candidate did not probe every physical GPU: "
+                    f"{physical_gpu_coverage}"
+                ),
+            }
+            all_pass = False
         attempt = {
             "micro_batch": micro_batch,
             "accumulation": accumulation,
             "effective_batch": effective_batch,
             "all_pass": all_pass,
             "probes": probes,
+            "physical_gpu_assignment": physical_gpu_assignment,
+            "physical_gpu_coverage": physical_gpu_coverage,
         }
         attempts.append(attempt)
         if fatal_error is not None:
@@ -1415,6 +1551,12 @@ def execute_driver(args) -> tuple[dict, bool]:
         "scientific_authority": "NONE",
         "official_test_accessed": False,
         "quality_metrics_computed": False,
+        "hardware": {
+            "inventory": physical_gpu_inventory,
+            "inventory_sha256": physical_gpu_inventory_sha256,
+            "assignment_policy": GPU_ASSIGNMENT_POLICY,
+            "required_physical_indices": list(REQUIRED_PHYSICAL_GPU_INDICES),
+        },
     }
     _atomic_json(Path(args.output), payload)
     return payload, payload["all_pass"]

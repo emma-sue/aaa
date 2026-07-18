@@ -4,6 +4,20 @@ set -uo pipefail
 ROOT=/root/autodl-tmp/srsc_lite_v12
 cd "$ROOT"
 
+# The currently running AIO-3 job was started before the global flock was
+# added to this launcher, so that legacy parent does not own FD 9.  Refuse a
+# second launch based on the actual trainer process as well as the advisory
+# lock.  The process check comes first; the flock still closes the race
+# between two otherwise simultaneous fresh launches.
+mapfile -t active_stage_a_pids < <(
+  ps -eo pid=,args= | awk \
+    '$0 ~ /python .*scripts\/train_stage_a_ddp\.py/ {print $1}'
+)
+if [ "${#active_stage_a_pids[@]}" -gt 0 ]; then
+  echo "ERROR: AIO-3 Stage-A trainer already active; refusing duplicate launch: ${active_stage_a_pids[*]}" >&2
+  exit 5
+fi
+
 exec 9>"$ROOT/.srsc_gpu_pipeline.lock"
 if ! flock -n 9; then
   echo "ERROR: SRSC GPU pipeline lock is already held" >&2

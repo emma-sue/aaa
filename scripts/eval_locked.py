@@ -32,6 +32,12 @@ EXPECTED_TASKS = {
 OFFICIAL_MANIFEST_SCHEMA_VERSION = 2
 OFFICIAL_DATA_MANIFEST_SCHEMA_VERSION = 1
 OFFICIAL_LEDGER_SCHEMA_VERSION = 1
+SHARED_STAGE_B_MARKER_SCHEMA_VERSION = 1
+SHARED_STAGE_B_MARKER_NAME = "stage_b_aio3_aio5_terminal_frozen.json"
+STAGE_B_TERMINAL_ATTESTATION_NAMES = {
+    "aio3": "stage_b_terminal_aio3.json",
+    "aio5": "stage_b_terminal_aio5.json",
+}
 VALID_MODEL_KINDS = {"baseline", "baseline_matched", "srsc"}
 OFFICIAL_EVAL_CODE_FILES = (
     "scripts/eval_locked.py",
@@ -168,6 +174,95 @@ def official_evaluation_code_hashes() -> dict[str, str]:
     return {relative: sha256_file(ROOT / relative) for relative in OFFICIAL_EVAL_CODE_FILES}
 
 
+def shared_stage_b_marker_path(root: Path = ROOT) -> Path:
+    return Path(root) / "artifacts/manifests" / SHARED_STAGE_B_MARKER_NAME
+
+
+def validate_shared_stage_b_terminal_marker(
+    root: Path = ROOT, *, require_official_authorization: bool = True,
+) -> dict:
+    """Validate the atomic AIO-3/AIO-5 Stage-B terminal freeze.
+
+    This check is deliberately independent of the orchestrator.  Every code
+    path that can enumerate official identities or consume official images
+    calls it directly, so invoking ``eval_locked.py`` by hand cannot bypass
+    the cross-protocol sequencing contract.
+    """
+    root = Path(root).resolve()
+    marker_path = shared_stage_b_marker_path(root)
+    try:
+        marker = json.loads(marker_path.read_text())
+    except FileNotFoundError as error:
+        raise PermissionError(
+            "official test remains sealed until the shared AIO3+AIO5 "
+            "Stage-B terminal marker is frozen"
+        ) from error
+    except (OSError, json.JSONDecodeError) as error:
+        raise PermissionError("shared Stage-B terminal marker is unreadable") from error
+    if not isinstance(marker, dict):
+        raise PermissionError("shared Stage-B terminal marker must be an object")
+    if (
+        marker.get("schema_version") != SHARED_STAGE_B_MARKER_SCHEMA_VERSION
+        or marker.get("status") != "FROZEN"
+        or set((marker.get("protocols") or {})) != {"aio3", "aio5"}
+    ):
+        raise PermissionError("shared Stage-B terminal marker is incomplete")
+
+    expected_marker_path = str(marker_path.resolve())
+    if marker.get("marker_path") != expected_marker_path:
+        raise PermissionError("shared Stage-B terminal marker path drift")
+    protocol_authorizations = []
+    for protocol, expected_name in STAGE_B_TERMINAL_ATTESTATION_NAMES.items():
+        binding = marker["protocols"].get(protocol)
+        if not isinstance(binding, dict):
+            raise PermissionError(f"missing frozen Stage-B binding for {protocol}")
+        attestation = root / "artifacts/manifests" / expected_name
+        expected_attestation = str(attestation.resolve())
+        expected_sha = binding.get("sha256")
+        if (
+            binding.get("path") != expected_attestation
+            or not _is_sha256(expected_sha)
+            or not attestation.is_file()
+            or sha256_file(attestation) != expected_sha
+        ):
+            raise PermissionError(
+                f"frozen Stage-B attestation path/SHA256 drift for {protocol}"
+            )
+        try:
+            payload = json.loads(attestation.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise PermissionError(
+                f"invalid frozen Stage-B attestation for {protocol}"
+            ) from error
+        if not isinstance(payload, dict) or not all((
+            payload.get("schema_version") == SHARED_STAGE_B_MARKER_SCHEMA_VERSION,
+            payload.get("status") == "FROZEN",
+            payload.get("protocol") == protocol,
+            payload.get("stage") == "STAGE_B_COMPLETE",
+            payload.get("predicted_go") is True,
+            _is_sha256(payload.get("stage_b_runtime_manifest_sha256")),
+            _is_sha256(payload.get("terminal_decision_sha256")),
+            _is_sha256(payload.get("decision_revision_sha256")),
+            isinstance(payload.get("official_access_authorized"), bool),
+        )):
+            raise PermissionError(
+                f"frozen Stage-B attestation fields are incomplete for {protocol}"
+            )
+        if protocol == "aio3" and payload.get("capacity_robustness_go") is not True:
+            protocol_authorizations.append(False)
+        else:
+            protocol_authorizations.append(payload["official_access_authorized"])
+
+    authorized = all(protocol_authorizations)
+    if marker.get("official_access_authorized") is not authorized:
+        raise PermissionError("shared Stage-B official authorization is inconsistent")
+    if require_official_authorization and not authorized:
+        raise PermissionError(
+            "official test is blocked by a terminal Stage-B or 10/10 capacity gate"
+        )
+    return marker
+
+
 def _official_data_payload(cfg: dict) -> dict:
     """Hash the exact official identities without decoding pixels or using CUDA."""
     protocol = cfg["protocol"]
@@ -233,6 +328,7 @@ def _official_data_payload(cfg: dict) -> dict:
 
 def freeze_official_data_manifest(cfg: dict) -> Path:
     """Freeze official path/pair/content identity after Stage-C configuration lock."""
+    validate_shared_stage_b_terminal_marker(ROOT)
     payload = _official_data_payload(cfg)
     path = ROOT / "artifacts/manifests" / f"official_dataset_{cfg['protocol']}.json"
     if path.is_file():
@@ -323,6 +419,7 @@ def validate_frozen_official_manifest(
     happen before checkpoint hashing, so an unlisted checkpoint or output is
     rejected without reading checkpoint bytes or touching CUDA.
     """
+    validate_shared_stage_b_terminal_marker(ROOT)
     manifest_path = Path(manifest_path)
     manifest_bytes = manifest_path.read_bytes()
     manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
@@ -1013,6 +1110,10 @@ def main():
         raise PermissionError(
             "official test requires --official-manifest with a pre-frozen candidate set"
         )
+    if args.split == "official_test":
+        # This must precede reading config/checkpoint/manifest bytes.  The
+        # shared marker is the cross-protocol authority, not the CLI flag.
+        validate_shared_stage_b_terminal_marker(ROOT)
     config_path = Path(args.config)
     config_bytes = config_path.read_bytes()
     config_sha256 = hashlib.sha256(config_bytes).hexdigest()
