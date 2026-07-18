@@ -1,0 +1,38 @@
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+*credential*
+*credentials*
+*private_key*
+id_rsa*
+id_ed25519*
+
+# Datasets, generated symlink trees, caches, and third-party checkouts
+/data/
+/data_raw/
+/upstream/
+/artifacts/cache/
+/artifacts/invalid_protocol/
+/.pytest_cache/
+/.ruff_cache/
+**/__pycache__/
+*.py[cod]
+
+# Large model/data archives never belong in ordinary Git history
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.tmp
+*.lock
+
+# Local backup state; checkpoint metadata is tracked under recovery/
+.local_backup_state.json
+.checkpoint_hash_cache.json
+

@@ -1,0 +1,37 @@
+{
+  "checkpoint": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch015_step0032265.pt",
+  "checkpoint_sha256": "45121ea6c8799bd610d9a0a8745da95f7a25f28fc26bf838ff6dcdd5fea64418",
+  "delta": {
+    "dehaze": 2.406196622150702,
+    "denoise15": 0.31090651206600484,
+    "denoise25": 0.3741396376230206,
+    "denoise50": 0.49870763241666083,
+    "derain": 1.420332717895512,
+    "macro_psnr": 1.0020566244303843
+  },
+  "generated_utc": "2026-07-13T20:05:41.853042+00:00",
+  "interpretation": "Stage-A coarse trend only; not an SRSC or R2R gain claim.",
+  "metrics_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/metrics/aio3_stage_a_coarse_seed1415926_locked_val.jsonl",
+  "metrics_sha256": "bb6d203572527803b91f554a79cb766f967c32027e1d8b9345e89a00cd45e4c1",
+  "previous": {
+    "dehaze": 30.73765804011647,
+    "denoise15": 33.80661203328845,
+    "denoise25": 31.355534636858597,
+    "denoise50": 27.995130594494274,
+    "derain": 31.282574558258055,
+    "epoch": 10,
+    "macro_psnr": 31.035501972603168,
+    "step": 21510
+  },
+  "status": "ready",
+  "target": {
+    "dehaze": 33.143854662267174,
+    "denoise15": 34.11751854535446,
+    "denoise25": 31.729674274481617,
+    "denoise50": 28.493838226910935,
+    "derain": 32.70290727615357,
+    "epoch": 15,
+    "macro_psnr": 32.03755859703355,
+    "step": 32265
+  }
+}

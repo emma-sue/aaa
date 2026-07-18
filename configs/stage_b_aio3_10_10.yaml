@@ -1,0 +1,37 @@
+protocol: aio3
+seed: 1415926
+data_root: /root/autodl-tmp/srsc_lite_v12/data
+list_root: /root/autodl-tmp/srsc_lite_v12/upstream/PromptIR/data_dir
+split_manifest: /root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json
+train_split: train
+coordinate_stats: /root/autodl-tmp/srsc_lite_v12/artifacts/stats/coordinate_stats_aio3_10_10.json
+crop_size: 128
+micro_batch: 16
+accumulation: 4
+effective_batch: 64
+workers: 32
+epochs: 30
+warmup_epochs: 3
+warmup_start_lr: 0.0000001
+scheduler_max_epochs: 30
+lr: 0.0002
+min_lr: 0.00000001
+pretrain_eta_min: 0.00000001
+optimizer: adam
+weight_decay: 0.0
+gradient_clip: 0.01
+lambda_state: 0.1
+lambda_clean: 0.1
+precision: bf16
+save_every_steps: 1000
+validate_every_epochs: 2
+official_test_locked: true
+model:
+  dim: 48
+  matched_dim: 52
+  encoder_blocks: [4, 6, 6, 8]
+  d1_blocks: [3, 3, 4]
+  d2_blocks: [3, 3, 3]
+  d2_refinement: 1
+  heads: [1, 2, 4, 8]
+  expansion: 2.66

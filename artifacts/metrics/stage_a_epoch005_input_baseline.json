@@ -1,0 +1,35 @@
+{
+  "comparison_scope": "same locked validation split and deterministic degraded inputs",
+  "counts": {
+    "dehaze": 205,
+    "denoise15": 103,
+    "denoise25": 103,
+    "denoise50": 103,
+    "derain": 20
+  },
+  "epoch5_stage_a": {
+    "dehaze": 29.198444129199515,
+    "denoise15": 32.36121409147688,
+    "denoise25": 29.93817516438012,
+    "denoise50": 26.519114651726287,
+    "derain": 26.03102617263794,
+    "macro_psnr": 28.80959484188415
+  },
+  "input_as_output": {
+    "dehaze": 18.663521515450828,
+    "denoise15": 24.992733760944848,
+    "denoise25": 20.755415073876243,
+    "denoise50": 15.264059353800652,
+    "derain": 24.810553741455077,
+    "macro_psnr": 20.89725668910553
+  },
+  "restoration_delta": {
+    "dehaze": 10.534922613748687,
+    "denoise15": 7.368480330532034,
+    "denoise25": 9.182760090503876,
+    "denoise50": 11.255055297925635,
+    "derain": 1.2204724311828627,
+    "macro_psnr": 7.91233815277862
+  },
+  "warning": "Stage-A coarse restoration evidence only; not an SRSC or R2R gain comparison."
+}

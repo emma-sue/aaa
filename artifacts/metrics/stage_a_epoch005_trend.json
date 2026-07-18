@@ -1,0 +1,21 @@
+{
+  "checkpoint": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch005_step0010755.pt",
+  "checkpoint_sha256": "c7a229c08d10961da550fe638b84facff59cf10921a29a99eb951bd2c488e39d",
+  "delta": null,
+  "generated_utc": "2026-07-13T12:54:03.696932+00:00",
+  "interpretation": "Stage-A coarse trend only; not an SRSC or R2R gain claim.",
+  "metrics_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/metrics/aio3_stage_a_coarse_seed1415926_locked_val.jsonl",
+  "metrics_sha256": "d46d26600e5c47e1fa6ab9f8fc23d601deb407020da763b47544aa6dce9f79aa",
+  "previous": null,
+  "status": "ready",
+  "target": {
+    "dehaze": 29.198444129199515,
+    "denoise15": 32.36121409147688,
+    "denoise25": 29.93817516438012,
+    "denoise50": 26.519114651726287,
+    "derain": 26.03102617263794,
+    "epoch": 5,
+    "macro_psnr": 28.80959484188415,
+    "step": 10755
+  }
+}

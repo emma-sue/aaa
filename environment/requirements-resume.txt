@@ -1,0 +1,19 @@
+# Captured from the active 4xRTX4090 experiment environment on 2026-07-18 UTC.
+# Install the CUDA 12.1 PyTorch wheels from the official PyTorch index.
+torch==2.3.0+cu121
+torchvision==0.18.0+cu121
+numpy==2.4.6
+PyYAML==6.0.1
+pillow==10.3.0
+scikit-image==0.26.0
+opencv-python==5.0.0.93
+opencv-python-headless==5.0.0.93
+einops==0.8.2
+tqdm==4.68.4
+fvcore==0.1.5.post20221221
+iopath==0.1.10
+yacs==0.1.8
+tensorboard==2.16.2
+pytest==9.1.1
+ruff==0.15.21
+

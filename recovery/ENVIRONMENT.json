@@ -1,0 +1,14 @@
+{
+  "cuda_runtime": "12.1",
+  "cudnn": 8902,
+  "generated_utc": "2026-07-18T13:28:05.032333+00:00",
+  "gpus": [
+    "NVIDIA GeForce RTX 4090, 580.76.05, 24564 MiB",
+    "NVIDIA GeForce RTX 4090, 580.76.05, 24564 MiB",
+    "NVIDIA GeForce RTX 4090, 580.76.05, 24564 MiB",
+    "NVIDIA GeForce RTX 4090, 580.76.05, 24564 MiB"
+  ],
+  "platform": "Linux-5.15.0-78-generic-x86_64-with-glibc2.35",
+  "python": "3.12.3 | packaged by Anaconda, Inc. | (main, May  6 2024, 19:46:43) [GCC 11.2.0]",
+  "torch": "2.3.0+cu121"
+}

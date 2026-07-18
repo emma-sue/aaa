@@ -1,0 +1,25 @@
+{
+  "counts": {
+    "deblur_gt": 2103,
+    "deblur_input": 2103,
+    "dehaze_gt": 72135,
+    "dehaze_input": 72135,
+    "denoise": 5144,
+    "derain_gt": 200,
+    "derain_input": 200,
+    "lowlight_gt": 485,
+    "lowlight_input": 485
+  },
+  "data_root": "/root/autodl-tmp/srsc_lite_v12/data",
+  "expected_entries": 154990,
+  "list_sha256": {
+    "gopro/train_gopro.txt": "ecfcfcf47c32e24f484fed8612c4298060711208c2663133cf9593e635e22296",
+    "hazy/hazy_outside.txt": "e01b84818789499db89662d7f212e95ba334ebbee9c5c38539f09e9ddf503ca1",
+    "lol/train_lol.txt": "66696174db3b0692b8348ce11a3b73bba4978dfca63a3edbbf4ce95e003c2c57",
+    "noisy/denoise.txt": "d8051fbfdaa03b07df67f19271cc30000cf7d823f2d5a48dd0aa7bd1c1450cc7",
+    "rainy/rainTrain.txt": "8ca003fb5e4ea51d3041a29f833fcbb237e3f3aebfc6fc3ccaada141004e3b10"
+  },
+  "missing_entries": 0,
+  "missing_preview": [],
+  "protocol": "aio5"
+}

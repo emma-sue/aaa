@@ -1,0 +1,33 @@
+{
+  "blocking_issues": [
+    "AIO-3 Stage-A is still training",
+    "formal Oracle and Predicted gates have not run",
+    "AIO-5 and final paired official evaluation have not run"
+  ],
+  "decision_revision_sha256": "1987395638704f75c32c7bc232556da3d11c6d94d431319f76d62389b34f18a9",
+  "gpu_hours": 58.58597445579858,
+  "gpu_hours_by_run": {
+    "aio3_stage_a_coarse_seed1415926": 58.58597445579858
+  },
+  "macs": {
+    "status": "fvcore_operations_reported_separately_not_relabeled_as_macs"
+  },
+  "next_command": "continue active tmux srsc_pipeline; no manual protocol change",
+  "oracle_direction": "INCOMPLETE",
+  "oracle_sign": "INCOMPLETE",
+  "params": {
+    "clean_restormer_aio": 25437220,
+    "matched_restormer_aio": 29805484,
+    "srsc_lite": 29938604
+  },
+  "per_task_deltas": {},
+  "predicted_srsc": "INCOMPLETE",
+  "promptir_parity": "PASS",
+  "publication_go": "INCOMPLETE",
+  "residual_code_control": "INCOMPLETE",
+  "scientific_go": "INCOMPLETE",
+  "selected_model": null,
+  "selection_status": "INCOMPLETE",
+  "stage_a": "INCOMPLETE",
+  "updated_at_utc": "2026-07-18T07:55:57.139592+00:00"
+}

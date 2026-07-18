@@ -1,0 +1,37 @@
+protocol: aio5
+seed: 1415926
+data_root: /root/autodl-tmp/srsc_lite_v12/data
+list_root: /root/R2R/data_dir
+split_manifest: /root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio5.json
+train_split: train
+coordinate_stats: /root/autodl-tmp/srsc_lite_v12/artifacts/stats/coordinate_stats_aio5.json
+crop_size: 128
+micro_batch: 15
+accumulation: 8
+effective_batch: 120
+workers: 24
+epochs: 240
+warmup_epochs: 15
+warmup_start_lr: 0.0000001
+scheduler_max_epochs: 270
+lr: 0.0002
+min_lr: 0.00000001
+pretrain_eta_min: 0.0
+optimizer: adam
+weight_decay: 0.0
+gradient_clip: 0.01
+lambda_state: 0.1
+lambda_clean: 0.1
+precision: bf16
+save_every_steps: 1000
+validate_every_epochs: 5
+official_test_locked: true
+model:
+  dim: 48
+  matched_dim: 52
+  encoder_blocks: [4, 6, 6, 8]
+  d1_blocks: [2, 2, 2]
+  d2_blocks: [4, 4, 4]
+  d2_refinement: 2
+  heads: [1, 2, 4, 8]
+  expansion: 2.66

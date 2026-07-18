@@ -1,0 +1,19 @@
+{
+  "counts": {
+    "dehaze_gt": 72135,
+    "dehaze_input": 72135,
+    "denoise": 5144,
+    "derain_gt": 200,
+    "derain_input": 200
+  },
+  "data_root": "/root/autodl-tmp/srsc_lite_v12/data",
+  "expected_entries": 149814,
+  "list_sha256": {
+    "hazy/hazy_outside.txt": "e01b84818789499db89662d7f212e95ba334ebbee9c5c38539f09e9ddf503ca1",
+    "noisy/denoise.txt": "703269006085cb246f8aed055593b8566a8c403f13843dbee68fc02d0804d890",
+    "rainy/rainTrain.txt": "8ca003fb5e4ea51d3041a29f833fcbb237e3f3aebfc6fc3ccaada141004e3b10"
+  },
+  "missing_entries": 0,
+  "missing_preview": [],
+  "protocol": "aio3"
+}

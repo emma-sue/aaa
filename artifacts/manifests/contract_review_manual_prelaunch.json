@@ -1,0 +1,11 @@
+{
+  "phase": "manual_prelaunch",
+  "time": "2026-07-12T19:34:27.810198+00:00",
+  "sha256": {
+    "/root/aaa/SRSC_Lite_v1.2_Codex_\u6700\u7ec8\u5b9e\u65bdPrompt_v1.3.md": "536c936d0111640b681183e3cd17a27ecf4056c1636e9102fc90977015581a4a",
+    "/root/ResearchStudio/ideaspark_run/end-to-end-restoration-state-feedback/srsc_lite_v1_2_reassessment.md": "2cf70574498e4a4380fa1b7ff4ea15ec3d9d9f46c2426b701b9348200b26bf6d",
+    "/root/autodl-tmp/srsc_lite_v12/reports/ARCHITECTURE.md": "1d96227a92570b6109d5dab0fb1e7f40a96c055f615c01917f5c831688f3f8e9",
+    "/root/.codex/skills/second-ir-work-cn/SKILL.md": "bd09b57de2e817ff2d89925f0d23d49be84da04b5258fb9fa2bf02d624d7ccaa",
+    "/root/.codex/skills/autosota/SKILL.md": "1094de3d1e1f474bd2f5608c8abd1bd7c4fb066d68464b97a6b5846fe6c06c7d"
+  }
+}

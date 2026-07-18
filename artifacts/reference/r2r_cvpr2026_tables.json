@@ -1,0 +1,24 @@
+{
+  "source": "/root/aaa/Wang 等 - Retrieve-to-restore Efficient all-in-one image restoration with a retrieval-based degradation bank.pdf",
+  "source_sha256": "662f9992c13fcba5fafad1867605022fa117124ab544c536ce5256b370d38b10",
+  "title": "Retrieve-to-Restore: Efficient All-in-One Image Restoration with a Retrieval-Based Degradation Bank",
+  "venue_from_pdf_metadata": "IEEE Conference on Computer Vision and Pattern Recognition",
+  "metric_protocol": "full RGB images",
+  "table_pages_zero_based": {"table1_aio3": 4, "table2_aio5": 4},
+  "table1_aio3": {
+    "dehaze": {"psnr": 31.40, "ssim": 0.977},
+    "derain": {"psnr": 37.46, "ssim": 0.980},
+    "denoise15": {"psnr": 34.10, "ssim": 0.936},
+    "denoise25": {"psnr": 31.45, "ssim": 0.895},
+    "denoise50": {"psnr": 28.22, "ssim": 0.806},
+    "reported_average": {"psnr": 32.53, "ssim": 0.918}
+  },
+  "table2_aio5": {
+    "dehaze": {"psnr": 30.64, "ssim": 0.974},
+    "derain": {"psnr": 36.61, "ssim": 0.975},
+    "denoise25": {"psnr": 31.35, "ssim": 0.891},
+    "deblur": {"psnr": 30.93, "ssim": 0.911},
+    "lowlight": {"psnr": 22.88, "ssim": 0.856},
+    "reported_average": {"psnr": 30.48, "ssim": 0.921}
+  }
+}

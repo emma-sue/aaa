@@ -1,0 +1,44 @@
+{
+  "clean_restormer_aio": {
+    "params": 25437220,
+    "flops": 102552846336,
+    "macs_convention": "fvcore counted operations; report as FLOPs, not relabeled MACs",
+    "latency_ms_median": 38.02444599568844,
+    "latency_ms_mean": 38.21576647460461,
+    "peak_vram_gib": 0.32654237747192383,
+    "input": [
+      1,
+      3,
+      256,
+      256
+    ]
+  },
+  "clean_restormer_aio_matched": {
+    "params": 29805484,
+    "flops": 119930748928,
+    "macs_convention": "fvcore counted operations; report as FLOPs, not relabeled MACs",
+    "latency_ms_median": 40.386504493653774,
+    "latency_ms_mean": 40.58442655950785,
+    "peak_vram_gib": 0.3571963310241699,
+    "input": [
+      1,
+      3,
+      256,
+      256
+    ]
+  },
+  "srsc_lite": {
+    "params": 29938604,
+    "flops": 116467908608,
+    "macs_convention": "fvcore counted operations; report as FLOPs, not relabeled MACs",
+    "latency_ms_median": 39.76409137248993,
+    "latency_ms_mean": 39.86515197902918,
+    "peak_vram_gib": 0.3647804260253906,
+    "input": [
+      1,
+      3,
+      256,
+      256
+    ]
+  }
+}

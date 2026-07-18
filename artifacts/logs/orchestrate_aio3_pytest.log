@@ -1,0 +1,38 @@
+..........................                                               [100%]
+26 passed in 17.85s
+..........................                                               [100%]
+26 passed in 17.87s
+..............................                                           [100%]
+30 passed in 17.74s
+......................................                                   [100%]
+38 passed in 18.25s
+..........................................                               [100%]
+42 passed in 18.64s
+.................................................                        [100%]
+49 passed in 19.15s
+.........................................................                [100%]
+57 passed in 19.23s
+......................................................................   [100%]
+=============================== warnings summary ===============================
+tests/test_training_protocol.py::test_pretrain_lr_curve_exactly_matches_public_r2r_closed_form
+  /root/miniconda3/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:143: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+    warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+
+tests/test_training_protocol.py::test_pretrain_lr_curve_exactly_matches_public_r2r_closed_form
+  /root/miniconda3/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:156: UserWarning: The epoch parameter in `scheduler.step()` was not necessary and is being deprecated where possible. Please use `scheduler.step()` to step the scheduler. During the deprecation, if epoch is different from None, the closed form is used instead of the new chainable form, where available. Please open an issue if you are unable to replicate your use case: https://github.com/pytorch/pytorch/issues/new/choose.
+    warnings.warn(EPOCH_DEPRECATION_WARNING, UserWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70 passed, 2 warnings in 19.16s
+......................................................................   [100%]
+=============================== warnings summary ===============================
+tests/test_training_protocol.py::test_pretrain_lr_curve_exactly_matches_public_r2r_closed_form
+  /root/miniconda3/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:143: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+    warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+
+tests/test_training_protocol.py::test_pretrain_lr_curve_exactly_matches_public_r2r_closed_form
+  /root/miniconda3/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:156: UserWarning: The epoch parameter in `scheduler.step()` was not necessary and is being deprecated where possible. Please use `scheduler.step()` to step the scheduler. During the deprecation, if epoch is different from None, the closed form is used instead of the new chainable form, where available. Please open an issue if you are unable to replicate your use case: https://github.com/pytorch/pytorch/issues/new/choose.
+    warnings.warn(EPOCH_DEPRECATION_WARNING, UserWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70 passed, 2 warnings in 18.88s
