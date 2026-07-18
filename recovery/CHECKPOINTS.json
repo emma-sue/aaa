@@ -107,11 +107,7 @@
     "stage": "a",
     "step": 221535
   },
-  "generated_utc": "2026-07-18T14:49:58.169712+00:00",
-  "git_snapshot": {
-    "commit": "2827fc74a5c8f26256ab759120feb8195184c94f",
-    "tree": "dde8f807fd7653abab65db9a7322d4e046b58433"
-  },
+  "generated_utc": "2026-07-18T15:00:36.272638+00:00",
   "ordinary_git_contains_checkpoints": false,
   "resume_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
@@ -135,7 +131,7 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 155,
+      "epoch": 157,
       "feedback": "O7",
       "model_state_present": true,
       "optimizer_state_present": true,
@@ -149,7 +145,7 @@
       "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 233005,
+      "step": 235299,
       "training_origin": null
     },
     "config": {
@@ -175,7 +171,7 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 155,
+      "epoch": 157,
       "feedback": "O7",
       "model_state_present": true,
       "optimizer_state_present": true,
@@ -189,13 +185,11 @@
       "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 233005,
+      "step": 235299,
       "training_origin": null
     },
-    "epoch": 155,
-    "git_snapshot_commit": "2827fc74a5c8f26256ab759120feb8195184c94f",
-    "git_snapshot_tree": "dde8f807fd7653abab65db9a7322d4e046b58433",
-    "mtime_ns": 1784385936265702521,
+    "epoch": 157,
+    "mtime_ns": 1784386777570300949,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
@@ -207,14 +201,14 @@
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
       "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
     },
-    "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+    "sha256": "f9cefc22be664862d0d37db9f380504b0a8de58a6e0817febd760559051cdb6c",
     "size": 303948065,
     "split_manifest": {
       "path": "artifacts/manifests/locked_split_aio3.json",
       "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
     },
     "stage": "a",
-    "step": 233005
+    "step": 235299
   },
   "resume_local_latest": {
     "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
@@ -238,7 +232,7 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 155,
+      "epoch": 157,
       "feedback": "O7",
       "model_state_present": true,
       "optimizer_state_present": true,
@@ -252,7 +246,7 @@
       "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 233005,
+      "step": 235299,
       "training_origin": null
     },
     "config": {
@@ -278,7 +272,7 @@
         "per_gpu_batch": 30,
         "world_size": 4
       },
-      "epoch": 155,
+      "epoch": 157,
       "feedback": "O7",
       "model_state_present": true,
       "optimizer_state_present": true,
@@ -292,13 +286,11 @@
       "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
       "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
       "stage": "a",
-      "step": 233005,
+      "step": 235299,
       "training_origin": null
     },
-    "epoch": 155,
-    "git_snapshot_commit": "2827fc74a5c8f26256ab759120feb8195184c94f",
-    "git_snapshot_tree": "dde8f807fd7653abab65db9a7322d4e046b58433",
-    "mtime_ns": 1784385936265702521,
+    "epoch": 157,
+    "mtime_ns": 1784386777570300949,
     "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
     "protocol": "aio3",
     "release_state": "planned",
@@ -310,14 +302,14 @@
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
       "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
     },
-    "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+    "sha256": "f9cefc22be664862d0d37db9f380504b0a8de58a6e0817febd760559051cdb6c",
     "size": 303948065,
     "split_manifest": {
       "path": "artifacts/manifests/locked_split_aio3.json",
       "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
     },
     "stage": "a",
-    "step": 233005
+    "step": 235299
   },
   "resume_uploaded": null,
   "runs": {
@@ -457,7 +449,7 @@
             "per_gpu_batch": 30,
             "world_size": 4
           },
-          "epoch": 155,
+          "epoch": 157,
           "feedback": "O7",
           "model_state_present": true,
           "optimizer_state_present": true,
@@ -471,7 +463,7 @@
           "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
           "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
           "stage": "a",
-          "step": 233005,
+          "step": 235299,
           "training_origin": null
         },
         "config": {
@@ -497,7 +489,7 @@
             "per_gpu_batch": 30,
             "world_size": 4
           },
-          "epoch": 155,
+          "epoch": 157,
           "feedback": "O7",
           "model_state_present": true,
           "optimizer_state_present": true,
@@ -511,13 +503,11 @@
           "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
           "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
           "stage": "a",
-          "step": 233005,
+          "step": 235299,
           "training_origin": null
         },
-        "epoch": 155,
-        "git_snapshot_commit": "2827fc74a5c8f26256ab759120feb8195184c94f",
-        "git_snapshot_tree": "dde8f807fd7653abab65db9a7322d4e046b58433",
-        "mtime_ns": 1784385936265702521,
+        "epoch": 157,
+        "mtime_ns": 1784386777570300949,
         "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
         "protocol": "aio3",
         "release_state": "planned",
@@ -529,14 +519,14 @@
           "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
           "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
         },
-        "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+        "sha256": "f9cefc22be664862d0d37db9f380504b0a8de58a6e0817febd760559051cdb6c",
         "size": 303948065,
         "split_manifest": {
           "path": "artifacts/manifests/locked_split_aio3.json",
           "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
         },
         "stage": "a",
-        "step": 233005
+        "step": 235299
       },
       "resume_local_latest": {
         "absolute_source_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
@@ -560,7 +550,7 @@
             "per_gpu_batch": 30,
             "world_size": 4
           },
-          "epoch": 155,
+          "epoch": 157,
           "feedback": "O7",
           "model_state_present": true,
           "optimizer_state_present": true,
@@ -574,7 +564,7 @@
           "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
           "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
           "stage": "a",
-          "step": 233005,
+          "step": 235299,
           "training_origin": null
         },
         "config": {
@@ -600,7 +590,7 @@
             "per_gpu_batch": 30,
             "world_size": 4
           },
-          "epoch": 155,
+          "epoch": 157,
           "feedback": "O7",
           "model_state_present": true,
           "optimizer_state_present": true,
@@ -614,13 +604,11 @@
           "split_manifest_path": "/root/autodl-tmp/srsc_lite_v12/artifacts/manifests/locked_split_aio3.json",
           "split_manifest_sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84",
           "stage": "a",
-          "step": 233005,
+          "step": 235299,
           "training_origin": null
         },
-        "epoch": 155,
-        "git_snapshot_commit": "2827fc74a5c8f26256ab759120feb8195184c94f",
-        "git_snapshot_tree": "dde8f807fd7653abab65db9a7322d4e046b58433",
-        "mtime_ns": 1784385936265702521,
+        "epoch": 157,
+        "mtime_ns": 1784386777570300949,
         "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt",
         "protocol": "aio3",
         "release_state": "planned",
@@ -632,14 +620,14 @@
           "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/top3.json",
           "sha256": "6ab54db4b685960ac28cfa514fe6a1f0037f28cc59d7002e18775478d92edad4"
         },
-        "sha256": "9119ec2eb550a72a125bfcbaf47ee37429af8afb880825119ebe2d873f1a13fd",
+        "sha256": "f9cefc22be664862d0d37db9f380504b0a8de58a6e0817febd760559051cdb6c",
         "size": 303948065,
         "split_manifest": {
           "path": "artifacts/manifests/locked_split_aio3.json",
           "sha256": "d555f661b2e7df291ee06d01cb75cc96627211ca9159564236fc8b79eec9cd84"
         },
         "stage": "a",
-        "step": 233005
+        "step": 235299
       },
       "resume_uploaded": null,
       "run_contract": null,
@@ -943,7 +931,7 @@
           "mtime_ns": 1784385963644530112,
           "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
           "protocol": "aio3",
-          "release_state": "planned",
+          "release_state": "uploaded",
           "release_tag": "best-aio3-stage-a-e0155-s0233005",
           "run_contract": null,
           "run_name": "aio3_stage_a_coarse_seed1415926",
@@ -1265,7 +1253,7 @@
       "mtime_ns": 1784385963644530112,
       "path": "artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/val_epoch155_step0233005.pt",
       "protocol": "aio3",
-      "release_state": "planned",
+      "release_state": "uploaded",
       "release_tag": "best-aio3-stage-a-e0155-s0233005",
       "run_contract": null,
       "run_name": "aio3_stage_a_coarse_seed1415926",

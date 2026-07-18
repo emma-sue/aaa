@@ -24,8 +24,20 @@ import yaml
 
 
 MANIFEST_SCHEMA = "srsc.stage_b_runtime_bundle.v1"
-WORKER_RESULT_SCHEMA = "srsc.stage_b_memory_preflight.v1"
+WORKER_RESULT_SCHEMA = "srsc.stage_b_memory_preflight.v2"
 REQUIRED_STAGE_B_CUBLAS_WORKSPACE_CONFIG = ":4096:8"
+PHYSICAL_GPU_INVENTORY_SCHEMA = "srsc.physical_gpu_inventory.v1"
+REQUIRED_PHYSICAL_GPU_INDICES = (0, 1, 2, 3)
+MAX_STARTUP_GPU_USED_BYTES = 512 * 2**20
+GPU_ASSIGNMENT_POLICY = "STABLE_ARM_ORDER_ROUND_ROBIN_PHYSICAL_0_1_2_3"
+NVIDIA_SMI_INVENTORY_QUERY = (
+    "index",
+    "uuid",
+    "name",
+    "memory.total",
+    "memory.free",
+    "compute_mode",
+)
 
 # The order is scientific state: the selector must take the first candidate
 # whose complete probe set passes.  Adding/reordering candidates creates a new
@@ -109,16 +121,152 @@ def first_all_pass(
     raise RuntimeError(f"no preregistered Stage-B runtime candidate passed for {protocol}")
 
 
-def required_probe_ids(protocol: str) -> tuple[str, ...]:
-    probes: list[str] = []
+def required_worker_arms(protocol: str) -> tuple[tuple[str, str, str], ...]:
+    """Return the immutable worker order used for four-GPU round-robin."""
+    arms: list[tuple[str, str, str]] = []
     for role in RUNTIME_ROLES.get(protocol, ()):
         for stage in ("b_oracle", "b_predicted"):
             for feedback in ("O7", "O12"):
-                for scope in ("train_step", "native_val"):
-                    probes.append(f"{role}:{stage}:{feedback}:{scope}")
-    if not probes:
+                arms.append((role, stage, feedback))
+    if not arms:
         raise ValueError(f"unsupported Stage-B runtime protocol: {protocol!r}")
+    return tuple(arms)
+
+
+def expected_physical_gpu_for_arm(
+    protocol: str,
+    role: str,
+    stage: str,
+    feedback: str,
+) -> int:
+    arm = (role, stage, feedback)
+    try:
+        arm_index = required_worker_arms(protocol).index(arm)
+    except ValueError as error:
+        raise ValueError(f"unsupported Stage-B worker arm: {arm!r}") from error
+    return REQUIRED_PHYSICAL_GPU_INDICES[
+        arm_index % len(REQUIRED_PHYSICAL_GPU_INDICES)
+    ]
+
+
+def required_probe_ids(protocol: str) -> tuple[str, ...]:
+    probes: list[str] = []
+    for role, stage, feedback in required_worker_arms(protocol):
+        for scope in ("train_step", "native_val"):
+            probes.append(f"{role}:{stage}:{feedback}:{scope}")
     return tuple(probes)
+
+
+def canonical_json_sha256(payload: Mapping[str, object]) -> str:
+    serialized = json.dumps(
+        dict(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def validate_physical_gpu_inventory(
+    payload: Mapping[str, object],
+) -> tuple[dict, ...]:
+    """Validate the no-CUDA parent inventory used to bind every worker.
+
+    The four physical cards must be homogeneous and effectively idle before
+    any worker starts.  This prevents a fit result on one lucky/default card
+    from being frozen as the runtime for four-card scientific execution.
+    """
+    if not isinstance(payload, Mapping):
+        raise RuntimeError("physical GPU inventory is not a mapping")
+    if payload.get("schema") != PHYSICAL_GPU_INVENTORY_SCHEMA:
+        raise RuntimeError("physical GPU inventory schema mismatch")
+    if payload.get("source") != "nvidia-smi_parent_no_cuda_context":
+        raise RuntimeError("physical GPU inventory source is not the parent nvidia-smi")
+    expected_command = [
+        "nvidia-smi",
+        f"--query-gpu={','.join(NVIDIA_SMI_INVENTORY_QUERY)}",
+        "--format=csv,noheader,nounits",
+    ]
+    if payload.get("command") != expected_command:
+        raise RuntimeError("physical GPU inventory command drift")
+    if payload.get("required_physical_indices") != list(
+        REQUIRED_PHYSICAL_GPU_INDICES
+    ):
+        raise RuntimeError("physical GPU inventory required-index drift")
+    if int(payload.get("max_startup_used_bytes", -1)) != (
+        MAX_STARTUP_GPU_USED_BYTES
+    ):
+        raise RuntimeError("physical GPU startup-idle threshold drift")
+    records = payload.get("gpus")
+    if not isinstance(records, list) or len(records) != len(
+        REQUIRED_PHYSICAL_GPU_INDICES
+    ):
+        raise RuntimeError("exactly four physical GPUs are required")
+    by_index: dict[int, dict] = {}
+    for raw in records:
+        if not isinstance(raw, dict):
+            raise RuntimeError("physical GPU inventory record is not a mapping")
+        try:
+            index = int(raw["physical_index"])
+            total_mib = int(raw["total_memory_mib"])
+            free_mib = int(raw["free_memory_mib"])
+            total_bytes = int(raw["total_memory_bytes"])
+            free_bytes = int(raw["free_memory_bytes"])
+            used_bytes = int(raw["startup_used_bytes"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("physical GPU inventory numeric fields are invalid") from error
+        if index in by_index:
+            raise RuntimeError("physical GPU inventory contains a duplicate index")
+        if (
+            total_mib <= 0
+            or free_mib < 0
+            or free_mib > total_mib
+            or total_bytes != total_mib * 2**20
+            or free_bytes != free_mib * 2**20
+            or used_bytes != total_bytes - free_bytes
+        ):
+            raise RuntimeError("physical GPU memory inventory is inconsistent")
+        name = raw.get("name")
+        uuid = raw.get("uuid")
+        compute_mode = raw.get("compute_mode")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(uuid, str)
+            or not uuid.startswith("GPU-")
+            or not isinstance(compute_mode, str)
+            or not compute_mode.strip()
+            or "prohibited" in compute_mode.lower()
+        ):
+            raise RuntimeError("physical GPU identity/compute mode is invalid")
+        expected_idle = used_bytes <= MAX_STARTUP_GPU_USED_BYTES
+        if raw.get("startup_idle_pass") is not expected_idle:
+            raise RuntimeError("physical GPU startup-idle evidence is not derived")
+        if not expected_idle:
+            raise RuntimeError(
+                f"physical GPU {index} has significant startup occupancy: "
+                f"{used_bytes} bytes used"
+            )
+        by_index[index] = dict(raw)
+    if tuple(sorted(by_index)) != REQUIRED_PHYSICAL_GPU_INDICES:
+        raise RuntimeError("physical GPU indices must be exactly 0,1,2,3")
+    ordered = tuple(by_index[index] for index in REQUIRED_PHYSICAL_GPU_INDICES)
+    if len({record["uuid"] for record in ordered}) != len(ordered):
+        raise RuntimeError("physical GPU UUIDs must be unique")
+    names = {record["name"] for record in ordered}
+    totals = {record["total_memory_bytes"] for record in ordered}
+    modes = {record["compute_mode"] for record in ordered}
+    if len(names) != 1 or len(totals) != 1:
+        raise RuntimeError("the four physical GPUs must share model and total memory")
+    if len(modes) != 1:
+        raise RuntimeError("the four physical GPUs must share one compute mode")
+    if (
+        payload.get("gpu_count") != len(ordered)
+        or payload.get("homogeneous_name") != ordered[0]["name"]
+        or int(payload.get("homogeneous_total_memory_bytes", -1))
+        != ordered[0]["total_memory_bytes"]
+        or payload.get("homogeneous_compute_mode") != ordered[0]["compute_mode"]
+        or payload.get("all_startup_idle") is not True
+    ):
+        raise RuntimeError("physical GPU inventory summary is not record-derived")
+    return ordered
 
 
 def stage_b_artifact_evidence(root: str | Path, protocol: str) -> tuple[str, ...]:
@@ -402,6 +550,21 @@ def _validate_worker_result(
         raise RuntimeError("Stage-B memory preflight inputs drifted during execution")
     if expected_bindings is not None and bindings != dict(expected_bindings):
         raise RuntimeError("Stage-B memory preflight input-binding mismatch")
+    hardware = payload.get("hardware")
+    if not isinstance(hardware, dict):
+        raise RuntimeError("Stage-B memory preflight lacks physical GPU inventory")
+    inventory = hardware.get("inventory")
+    if not isinstance(inventory, dict):
+        raise RuntimeError("Stage-B memory preflight GPU inventory is invalid")
+    validate_physical_gpu_inventory(inventory)
+    inventory_sha256 = canonical_json_sha256(inventory)
+    if (
+        hardware.get("inventory_sha256") != inventory_sha256
+        or hardware.get("assignment_policy") != GPU_ASSIGNMENT_POLICY
+        or hardware.get("required_physical_indices")
+        != list(REQUIRED_PHYSICAL_GPU_INDICES)
+    ):
+        raise RuntimeError("Stage-B physical GPU hardware binding drift")
     attempts = payload.get("attempts")
     if (
         not isinstance(attempts, list)
@@ -433,6 +596,54 @@ def _validate_worker_result(
                 f"missing={sorted(expected_probes - set(by_id))} "
                 f"extra={sorted(set(by_id) - expected_probes)}"
             )
+        expected_assignment = {
+            f"{role}:{stage}:{feedback}": expected_physical_gpu_for_arm(
+                protocol, role, stage, feedback
+            )
+            for role, stage, feedback in required_worker_arms(protocol)
+        }
+        if attempt.get("physical_gpu_assignment") != expected_assignment:
+            raise RuntimeError("Stage-B worker-arm physical GPU assignment drift")
+        observed_indices: set[int] = set()
+        for probe_id, probe in by_id.items():
+            role, stage, feedback, _scope = probe_id.split(":")
+            expected_index = expected_physical_gpu_for_arm(
+                protocol, role, stage, feedback
+            )
+            if (
+                probe.get("physical_gpu_index") != expected_index
+                or probe.get("physical_gpu_inventory_sha256")
+                != inventory_sha256
+            ):
+                raise RuntimeError(
+                    f"Stage-B probe physical GPU mapping drift: {probe_id}"
+                )
+            provenance = probe.get("worker_provenance")
+            if not isinstance(provenance, dict) or (
+                provenance.get("physical_gpu_index") != expected_index
+                or provenance.get("physical_gpu_inventory") != inventory
+                or provenance.get("physical_gpu_inventory_sha256")
+                != inventory_sha256
+            ):
+                raise RuntimeError(
+                    f"Stage-B probe lacks bound worker GPU provenance: {probe_id}"
+                )
+            gpu = provenance.get("gpu")
+            if not isinstance(gpu, dict) or gpu.get(
+                "physical_index"
+            ) != expected_index:
+                raise RuntimeError(
+                    f"Stage-B probe worker GPU identity drift: {probe_id}"
+                )
+            observed_indices.add(expected_index)
+        if sorted(observed_indices) != list(REQUIRED_PHYSICAL_GPU_INDICES):
+            raise RuntimeError(
+                "Stage-B memory preflight did not probe every physical GPU"
+            )
+        if attempt.get("physical_gpu_coverage") != list(
+            REQUIRED_PHYSICAL_GPU_INDICES
+        ):
+            raise RuntimeError("Stage-B attempt physical GPU coverage drift")
         computed = all(probe.get("passed") is True for probe in by_id.values())
         if attempt.get("all_pass") is not computed:
             raise RuntimeError("Stage-B memory preflight all_pass is not probe-derived")

@@ -368,6 +368,29 @@ def previous_run(previous_index: dict[str, object], run_name: str) -> dict[str, 
     return {}
 
 
+def preserve_previous_git_binding(
+    record: dict[str, object], previous: dict[str, object],
+) -> None:
+    rows = [*previous.get("top3", [])] if isinstance(previous.get("top3"), list) else []
+    for key in (
+        "current_best", "formal_best", "pilot_model", "resume_uploaded",
+        "resume_latest", "resume_local_latest",
+    ):
+        row = previous.get(key)
+        if isinstance(row, dict):
+            rows.append(row)
+    match = next((
+        row for row in rows
+        if isinstance(row, dict)
+        and row.get("sha256") == record.get("sha256")
+        and isinstance(row.get("git_snapshot_commit"), str)
+        and isinstance(row.get("git_snapshot_tree"), str)
+    ), None)
+    if match is not None:
+        record["git_snapshot_commit"] = match["git_snapshot_commit"]
+        record["git_snapshot_tree"] = match["git_snapshot_tree"]
+
+
 def relative_file_record(source: Path, path: Path) -> dict[str, object]:
     resolved = path.resolve()
     try:
@@ -489,6 +512,7 @@ def discover_run(
             record, protocol=protocol, stage=stage, run_name=run_name,
             selection="top3", state=state, legacy_tags=bool(legacy_match),
         )
+        preserve_previous_git_binding(record, previous)
         record["score"] = row.get("score")
         validate_checkpoint_record(
             record, source, run_name, stage,
@@ -512,6 +536,7 @@ def discover_run(
                 candidate, protocol=protocol, stage=stage, run_name=run_name,
                 selection="resume-last", state=state, legacy_tags=bool(legacy_match),
             )
+            preserve_previous_git_binding(candidate, previous)
             resume = candidate
             candidates.append(candidate)
 
@@ -534,6 +559,7 @@ def discover_run(
             formal_best, protocol=protocol, stage=stage, run_name=run_name,
             selection="formal-best-model", state=state, legacy_tags=False,
         )
+        preserve_previous_git_binding(formal_best, previous)
         formal_best["score"] = (marker.get("selected_locked_val") or {}).get("macro_psnr")
         formal_best["completion_marker"] = relative_file_record(source, formal_marker)
         candidates.append(formal_best)

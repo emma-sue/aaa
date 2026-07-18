@@ -14,6 +14,7 @@ memory/runtime evidence into the explicitly requested JSON output.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -43,14 +44,23 @@ from scripts.train import (  # noqa: E402
     tiled_stage_prediction,
 )
 from scripts.stage_b_runtime import (  # noqa: E402
+    GPU_ASSIGNMENT_POLICY,
+    MAX_STARTUP_GPU_USED_BYTES,
+    NVIDIA_SMI_INVENTORY_QUERY,
+    PHYSICAL_GPU_INVENTORY_SCHEMA,
+    REQUIRED_PHYSICAL_GPU_INDICES,
+    canonical_json_sha256,
+    expected_physical_gpu_for_arm,
     preflight_code_hashes,
     preflight_input_bindings,
+    required_worker_arms,
+    validate_physical_gpu_inventory,
 )
 from src.data import build_locked_val  # noqa: E402
 from src.data.aio_dataset import locked_sample_name  # noqa: E402
 
 
-SCHEMA = "srsc.stage_b_memory_preflight.v1"
+SCHEMA = "srsc.stage_b_memory_preflight.v2"
 ALLOWED_STAGES = ("b_oracle", "b_predicted")
 ALLOWED_FEEDBACK = ("O7", "O12")
 DEFAULT_NATIVE_SHAPES = {
@@ -58,6 +68,103 @@ DEFAULT_NATIVE_SHAPES = {
     "aio5": (720, 1280),
 }
 MIN_HEADROOM_BYTES = int(1.5 * 2**30)
+
+
+def _nvidia_smi_inventory_command() -> list[str]:
+    return [
+        "nvidia-smi",
+        f"--query-gpu={','.join(NVIDIA_SMI_INVENTORY_QUERY)}",
+        "--format=csv,noheader,nounits",
+    ]
+
+
+def _query_physical_gpu_inventory(
+    runner=subprocess.run,
+) -> dict:
+    """Inventory physical cards in the parent without creating CUDA contexts."""
+    command = _nvidia_smi_inventory_command()
+    try:
+        completed = runner(
+            command,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as error:
+        raise RuntimeError(f"nvidia-smi inventory failed: {error}") from error
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()[-2000:]
+        raise RuntimeError(
+            f"nvidia-smi inventory failed with returncode={completed.returncode}: "
+            f"{detail}"
+        )
+    rows = list(csv.reader(completed.stdout.splitlines()))
+    if len(rows) != len(REQUIRED_PHYSICAL_GPU_INDICES):
+        raise RuntimeError(
+            "Stage-B preflight requires exactly four nvidia-smi physical GPU rows"
+        )
+    records = []
+    for row in rows:
+        fields = [field.strip() for field in row]
+        if len(fields) != len(NVIDIA_SMI_INVENTORY_QUERY):
+            raise RuntimeError("nvidia-smi physical GPU row has unexpected fields")
+        index_raw, uuid, name, total_raw, free_raw, compute_mode = fields
+        try:
+            index = int(index_raw)
+            total_mib = int(total_raw)
+            free_mib = int(free_raw)
+        except ValueError as error:
+            raise RuntimeError("nvidia-smi memory/index fields are not integers") from error
+        total_bytes = total_mib * 2**20
+        free_bytes = free_mib * 2**20
+        used_bytes = total_bytes - free_bytes
+        records.append(
+            {
+                "physical_index": index,
+                "uuid": uuid,
+                "name": name,
+                "total_memory_mib": total_mib,
+                "free_memory_mib": free_mib,
+                "total_memory_bytes": total_bytes,
+                "free_memory_bytes": free_bytes,
+                "startup_used_bytes": used_bytes,
+                "startup_idle_pass": used_bytes <= MAX_STARTUP_GPU_USED_BYTES,
+                "compute_mode": compute_mode,
+            }
+        )
+    records.sort(key=lambda record: record["physical_index"])
+    inventory = {
+        "schema": PHYSICAL_GPU_INVENTORY_SCHEMA,
+        "source": "nvidia-smi_parent_no_cuda_context",
+        "command": command,
+        "required_physical_indices": list(REQUIRED_PHYSICAL_GPU_INDICES),
+        "max_startup_used_bytes": MAX_STARTUP_GPU_USED_BYTES,
+        "gpu_count": len(records),
+        "homogeneous_name": records[0]["name"] if records else None,
+        "homogeneous_total_memory_bytes": (
+            records[0]["total_memory_bytes"] if records else None
+        ),
+        "homogeneous_compute_mode": (
+            records[0]["compute_mode"] if records else None
+        ),
+        "all_startup_idle": all(
+            record["startup_idle_pass"] for record in records
+        ),
+        "gpus": records,
+    }
+    validate_physical_gpu_inventory(inventory)
+    return inventory
+
+
+def _parse_bound_gpu_inventory(raw: str) -> dict:
+    try:
+        inventory = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("worker physical GPU inventory JSON is invalid") from error
+    if not isinstance(inventory, dict):
+        raise RuntimeError("worker physical GPU inventory must be a mapping")
+    validate_physical_gpu_inventory(inventory)
+    return inventory
 
 
 def _sha256(path: str | Path) -> str:

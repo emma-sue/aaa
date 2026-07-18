@@ -133,3 +133,39 @@ To https://github.com/emma-sue/aaa.git
    021c473..7ee74ec  main -> main
 Branch 'main' set up to track remote branch 'main' from 'origin'.
 [2026-07-18T14:22:32.758615+00:00] backup iteration PASS
+{
+  "status": "PASS",
+  "files": 213,
+  "bytes": 27467402,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main 2827fc7] backup: reproducible snapshot 2026-07-18T14:50:00.186991+00:00
+ 6 files changed, 15 insertions(+), 40 deletions(-)
+[main 332a178] backup: reproducible snapshot 2026-07-18T14:50:00.290690+00:00
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+{
+  "status": "PASS",
+  "manifest_files": 213,
+  "checkpoint": "",
+  "checkpoint_verification": null
+}
+* Request at 2026-07-18 22:50:00.460645041 +0800 CST m=+0.017239983
+* Request to https://api.github.com/
+* Request took 3.407980895s
+* Request at 2026-07-18 22:50:03.869093936 +0800 CST m=+3.425688885
+* Request to https://api.github.com/graphql
+* Request took 550.465271ms
+github.com
+  ✓ Logged in to github.com as emma-sue (/root/.config/gh/hosts.yml)
+  ✓ Git operations for github.com configured to use https protocol.
+  ✓ Token: *******************
+  
+[git config --global --replace-all credential.https://github.com.helper ]
+[git config --global --add credential.https://github.com.helper !/usr/bin/gh auth git-credential]
+To https://github.com/emma-sue/aaa.git
+   7ee74ec..332a178  main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.
+* Request at 2026-07-18 22:50:47.748110061 +0800 CST m=+0.032207344
+* Request to https://api.github.com/repos/emma-sue/aaa/releases
+* Request took 2.218572282s
+https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0155-s0233005
