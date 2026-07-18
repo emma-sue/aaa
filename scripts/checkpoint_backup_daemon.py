@@ -141,7 +141,7 @@ def publish_release(repo: str, row: dict[str, object], immutable: bool) -> None:
         run_network([
             "gh", "release", "upload", tag, str(asset), str(sidecar), str(metadata),
             "--repo", repo, "--clobber",
-        ])
+        ], capture=True)
 
 
 def load_state(path: Path) -> dict[str, object]:
@@ -171,10 +171,16 @@ def iteration(args: argparse.Namespace) -> None:
     state_path = args.mirror / ".local_backup_state.json"
     state = load_state(state_path)
     uploaded = False
-    best = index.get("current_best")
-    if best and state.get("best_sha256") != best.get("sha256"):
-        publish_release(args.repo, best, immutable=True)
-        state["best_sha256"] = best["sha256"]
+    uploaded_best = set(state.get("best_sha256s", []))
+    if state.get("best_sha256"):
+        uploaded_best.add(str(state["best_sha256"]))
+    # Protect the current top-1 first.
+    current_best = index.get("current_best")
+    if current_best and current_best.get("sha256") not in uploaded_best:
+        publish_release(args.repo, current_best, immutable=True)
+        uploaded_best.add(str(current_best["sha256"]))
+        state["best_sha256"] = current_best["sha256"]
+        state["best_sha256s"] = sorted(uploaded_best)
         state["best_uploaded_utc"] = utc()
         save_state(state_path, state)
         uploaded = True
@@ -185,6 +191,19 @@ def iteration(args: argparse.Namespace) -> None:
         state["resume_sha256"] = resume["sha256"]
         state["resume_upload_unix"] = time.time()
         state["resume_uploaded_utc"] = utc()
+        save_state(state_path, state)
+        uploaded = True
+    # Once current best and rolling resume state are protected, archive the
+    # bounded retained top-3 backlog. This recovers surviving historical bests
+    # without delaying the checkpoint needed for exact continuation.
+    for best in index.get("top3", []):
+        if best.get("sha256") in uploaded_best:
+            continue
+        publish_release(args.repo, best, immutable=True)
+        uploaded_best.add(str(best["sha256"]))
+        state["best_sha256"] = best["sha256"]
+        state["best_sha256s"] = sorted(uploaded_best)
+        state["best_uploaded_utc"] = utc()
         save_state(state_path, state)
         uploaded = True
     save_state(state_path, state)

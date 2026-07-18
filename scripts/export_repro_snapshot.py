@@ -165,6 +165,9 @@ def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     state_path = destination / ".local_backup_state.json"
     upload_state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    uploaded_best = set(upload_state.get("best_sha256s", []))
+    if upload_state.get("best_sha256"):
+        uploaded_best.add(str(upload_state["best_sha256"]))
     records = []
     for row in top3:
         checkpoint = run_dir / str(row["checkpoint"])
@@ -178,7 +181,7 @@ def checkpoint_index(source: Path, destination: Path) -> dict[str, object]:
             "release_tag": f"best-aio3-stage-a-e{int(row['epoch']):04d}-s{int(row['step']):07d}",
             "asset_name": checkpoint.name,
             "release_state": (
-                "uploaded" if upload_state.get("best_sha256") == record["sha256"]
+                "uploaded" if record["sha256"] in uploaded_best
                 else "planned"
             ),
         })

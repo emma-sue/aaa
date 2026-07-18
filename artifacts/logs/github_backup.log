@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "files": 207,
+  "bytes": 29618279,
+  "destination": "/root/autodl-tmp/srsc_lite_v12_github"
+}
+[main 0e41cf8] backup: reproducible snapshot 2026-07-18T13:37:50.039579+00:00
+ 12 files changed, 155 insertions(+), 56 deletions(-)
+ create mode 100644 artifacts/logs/github_backup.log
+ create mode 100644 artifacts/metrics/stage_a_epoch145_trend.json
+* Request at 2026-07-18 21:37:50.112600065 +0800 CST m=+0.014033585
+* Request to https://api.github.com/
+* Request took 2.776154066s
+* Request at 2026-07-18 21:37:52.889188762 +0800 CST m=+2.790622321
+* Request to https://api.github.com/graphql
+* Request took 520.368636ms
+github.com
+  ✓ Logged in to github.com as emma-sue (/root/.config/gh/hosts.yml)
+  ✓ Git operations for github.com configured to use https protocol.
+  ✓ Token: *******************
+  
+[git config --global --replace-all credential.https://github.com.helper ]
+[git config --global --add credential.https://github.com.helper !/usr/bin/gh auth git-credential]
+To https://github.com/emma-sue/aaa.git
+   ebe9a11..0e41cf8  main -> main
+Branch 'main' set up to track remote branch 'main' from 'origin'.
+* Request at 2026-07-18 21:38:04.895639292 +0800 CST m=+0.027276923
+* Request to https://api.github.com/repos/emma-sue/aaa/releases
+* Request took 1.81430935s
+https://github.com/emma-sue/aaa/releases/tag/best-aio3-stage-a-e0145-s0221535
+* Request at 2026-07-18 21:38:06.760910289 +0800 CST m=+0.037880091
+* Request to https://api.github.com/repos/emma-sue/aaa/releases/tags/best-aio3-stage-a-e0145-s0221535
+* Request took 1.345166728s
+* Request at 2026-07-18 21:38:08.107013141 +0800 CST m=+1.383982942
+* Request at 2026-07-18 21:38:08.107040194 +0800 CST m=+1.384009996
+* Request to https://uploads.github.com/repos/emma-sue/aaa/releases/356109840/assets?label=&name=val_epoch145_step0221535.pt.sha256
+* Request to https://uploads.github.com/repos/emma-sue/aaa/releases/356109840/assets?label=&name=val_epoch145_step0221535.pt
+* Request at 2026-07-18 21:38:08.107244579 +0800 CST m=+1.384214387
+* Request to https://uploads.github.com/repos/emma-sue/aaa/releases/356109840/assets?label=&name=val_epoch145_step0221535.pt.json
+* Request took 7.695747573s
+* Request took 12.207015344s
+* Request took 7m45.302987321s
+[2026-07-18T13:45:54.111939+00:00] backup iteration FAIL: RuntimeError('Checkpoint changed after snapshot: /root/autodl-tmp/srsc_lite_v12/artifacts/checkpoints/aio3_stage_a_coarse_seed1415926/last.pt')

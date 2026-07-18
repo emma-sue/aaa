@@ -34,16 +34,16 @@
       "size": 631
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.csv": {
-      "sha256": "8d76880c8f83f42c6527dfefbdc4245255fd303c45fad1a951c0a148fc2b86ec",
-      "size": 533343
+      "sha256": "602c52f4ecebea2783e9aaf393ee7cb92c29c9ab29ff5ff851c85dc2996e09b9",
+      "size": 536860
     },
     "artifacts/logs/aio3_stage_a_coarse_seed1415926.log": {
       "sha256": "2095414a24358cd0c41d19c563afdbe452a2933bb999c52ea3cdc7f37f39db76",
       "size": 487605
     },
     "artifacts/logs/ddp_stage_a/rank0.log": {
-      "sha256": "27acd136473bf3dd8a651025fa94a1f4416601e4638c1b1a445abd9d79c0f7a6",
-      "size": 431297
+      "sha256": "fd4898d34cac162c3349e05f373d6d0d8271d1e09532642c632e38253a77db5e",
+      "size": 437279
     },
     "artifacts/logs/ddp_stage_a/rank1.log": {
       "sha256": "46884e7f16f38515c05859bd60cde44cb3eddc1b8103a2da5204070da8cbc6fa",
@@ -58,8 +58,8 @@
       "size": 226
     },
     "artifacts/logs/github_backup.log": {
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "size": 0
+      "sha256": "e7f9c49f56d242d183051ef3c6562905c1fca8068806779ff976e55eacaae765",
+      "size": 2457
     },
     "artifacts/logs/orchestrate_aio3_pytest.log": {
       "sha256": "4e5e3ad73a69901f965ca422259e37c9ed38fe2a879f91e7c0952f350162a871",
@@ -70,8 +70,8 @@
       "size": 612114
     },
     "artifacts/logs/pipeline_ddp.log": {
-      "sha256": "10953fb586d58ef1da27e47e5886154cc7671a0ecfb722c2ad172aa5daff2f37",
-      "size": 431447
+      "sha256": "23707eda0863217c107f3050d3eb49e7659fb6e0422e355541f4074f73137f9a",
+      "size": 437429
     },
     "artifacts/logs/promptir_official_parity.log": {
       "sha256": "436ba7cad30e5d7a3ab3ec189c3a95bf7c5e97445c8bc81af11b3ca0b0f78d46",
@@ -382,19 +382,19 @@
       "size": 35820
     },
     "docs/contracts/v1.4.md": {
-      "sha256": "b628290d408218fb343c184237f7eddf0459abb9289cb16fdefe5529ed3d2dfd",
-      "size": 276362
+      "sha256": "05132c1eb2be702de19e12b8f8941afbf5039cce20230cf7fcd664b18aea9908",
+      "size": 278493
     },
     "environment/requirements-resume.txt": {
       "sha256": "2620ecd96f41d0f6d76a8aaae8ee1d7ea0820c584c902ce4b6e61937e0bd5314",
       "size": 446
     },
     "recovery/CHECKPOINTS.json": {
-      "sha256": "6f3535f5cffbf0621956dbd552614edcecf8abf81aa4265930ca4d1b46c98f36",
-      "size": 4076
+      "sha256": "8b167431b374f937e70054ce2df10da324943a991724f76abf9e1addff1b26b5",
+      "size": 4078
     },
     "recovery/ENVIRONMENT.json": {
-      "sha256": "4d55110fc68a4b2398a6e0690af19b6d5d2fb740286fd6846181f2e9eba25cde",
+      "sha256": "65cad8893cd8b96c92606c078f935cab0f2cfb220bc7802e06db76184ed85247",
       "size": 514
     },
     "recovery/RESTORE.md": {
@@ -466,8 +466,8 @@
       "size": 31939
     },
     "scripts/checkpoint_backup_daemon.py": {
-      "sha256": "4409a7dc27a40cd17e3ea8a773b8444e1c77448c8e7649c3f7a901f3246e781b",
-      "size": 9029
+      "sha256": "f9baffe5f3ff051db7b6971e29e61e802d10e6d2cec19ccea85c0aa29c031f86",
+      "size": 10006
     },
     "scripts/compare_locked_paired.py": {
       "sha256": "cdd8448ccf43f85f0a82b37158d0b21f432d53bdfe5080b90c3ff2603249e8aa",
@@ -510,8 +510,8 @@
       "size": 25508
     },
     "scripts/export_repro_snapshot.py": {
-      "sha256": "06a891bab2d0e7029a025767c3b599990c35af0fdccb4ee5488fabe003cfc531",
-      "size": 13221
+      "sha256": "239d715de42638a5ad0b6880b7a09d74570999e198b8266c8a019ca0bc2af82e",
+      "size": 13365
     },
     "scripts/launch_aio3_stage_a_4x4090.sh": {
       "sha256": "02f752fd3ddc73abb4bb6ab5d3a7463a1092071dfb50c2d3ff274672f00fc755",
@@ -838,7 +838,7 @@
       "size": 4479
     }
   },
-  "generated_utc": "2026-07-18T13:37:49.565125+00:00",
+  "generated_utc": "2026-07-18T13:46:26.487480+00:00",
   "schema_version": 1,
   "source_root": "/root/autodl-tmp/srsc_lite_v12"
 }
